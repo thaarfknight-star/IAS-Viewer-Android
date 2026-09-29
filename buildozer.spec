@@ -55,7 +55,9 @@ android.backup_rules =
 [buildozer]
 
 # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
-log_level = 1
+# (رفع عیب‌یابی بیلد) سطح ۲ = خروجی کامل python-for-android در لاگ؛ اگر بیلد
+# دوباره fail شد، خطای واقعی p4a (نه فقط «Command failed») دیده می‌شود.
+log_level = 2
 
 # (str) Path to build artifact storage, for example:
 #    /home/user/.buildozer

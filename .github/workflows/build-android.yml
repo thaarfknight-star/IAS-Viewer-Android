@@ -1,9 +1,8 @@
 name: Build Android APK
 
-# بیلد را طه خودش تریگر می‌کند (قانون: بیلدها را خودم می‌زنم).
+# بیلد را طه خودش تریگر می‌کند (قانون: بیلدها را خودم می‌زنم) —
+# فقط دستی از تب Actions، نه با هر push.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -26,6 +25,16 @@ jobs:
           key: buildozer-global-v1
           restore-keys: |
             buildozer-global-v1
+
+      - name: Cache p4a build directory
+        uses: actions/cache@v4
+        with:
+          # دایرکتوری بیلد محلی p4a (رسیپی‌های کامپایل‌شده مثل opencv) —
+          # بیلدهای بعدی افزایشی می‌شوند و ۵۰ دقیقه کامپایل تکرار نمی‌شود.
+          path: .buildozer
+          key: p4a-build-v1-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            p4a-build-v1-
 
       - name: Install system dependencies
         run: |
