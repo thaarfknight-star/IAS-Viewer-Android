@@ -1,0 +1,59 @@
+name: Build Android APK
+
+# بیلد را طه خودش تریگر می‌کند (قانون: بیلدها را خودم می‌زنم).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        run: |
+          ver="$(tr -d '\r\n ' < version.txt)"
+          echo "APP_VERSION=$ver" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$ver"
+
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-v1
+          restore-keys: |
+            buildozer-global-v1
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip \
+            autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev automake
+
+      - name: Install Buildozer
+        run: |
+          pip3 install --upgrade pip
+          pip3 install "cython==0.29.33" buildozer
+          buildozer --version
+
+      - name: Build APK
+        run: buildozer android debug
+
+      - name: Rename APK (نام خروجی با ANDROID)
+        run: |
+          mkdir -p dist
+          apk="$(ls bin/*.apk | head -n 1)"
+          test -n "$apk" || { echo "FAIL: APK ساخته نشد."; exit 1; }
+          out="dist/IAS-Viewer-ANDROID-v$APP_VERSION.apk"
+          cp "$apk" "$out"
+          ls -la "$out"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}
+          path: dist/IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}.apk

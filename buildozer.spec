@@ -1,0 +1,69 @@
+[app]
+
+# (str) Title of your application
+title = IAS Viewer
+
+# (str) Package name
+package.name = iasviewer
+
+# (str) Package domain (needed for android/ios packaging)
+package.domain = org.iasviewer
+
+# (str) Source code where the main.py live
+source.dir = .
+
+# (list) Source files to include (let empty to include not the exclusion)
+source.include_exts = py,png,jpg,jpeg,webp,ttf,json,txt
+
+# (str) Application version
+version = 2.0.80
+
+# (list) Application requirements
+# kivy: UI | opencv: پخش زنده‌ی دوربین (RTSP/HTTP) | numpy/pillow: فریم
+# arabic-reshaper + python-bidi: نمایش درست متن فارسی در Kivy
+requirements = python3,kivy,opencv,numpy,pillow,arabic-reshaper,python-bidi
+
+# (str) Supported orientations: landscape, portrait, sensor, all ...
+orientation = landscape
+
+# (bool) Indicate if the application should be fullscreen or not
+fullscreen = 0
+
+# (list) Android permissions
+# INTERNET برای اتصال به استریم دوربین‌ها (RTSP/HTTP) لازم است.
+android.permissions = INTERNET
+
+# (int) Target Android API (33 = Android 13)
+android.api = 33
+
+# (int) Minimum Android API
+android.minapi = 24
+
+# (bool) enables Android auto backup feature (Android API >=23)
+android.backup_rules =
+
+# (str) The format used to package the app for release mode (aab or apk)
+# android.release_artifact = aab
+
+# (str) Android architecture to build for
+# android.archs = arm64-v8a, armeabi-v7a
+
+[buildozer]
+
+# (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
+log_level = 1
+
+# (str) Path to build artifact storage, for example:
+#    /home/user/.buildozer
+# (default: <home>/.buildozer)
+# buildozer_dir =
+
+# (str) Path to build output (i.e. .apk, .aab) storage
+# bin_dir = ./bin
+
+# (bool) Allow skipping the git clone of python-for-android, and use
+# an already existing clone instead.
+# p4a.fork =
+
+# (str) python-for-android branch to use
+# p4a.branch = master
