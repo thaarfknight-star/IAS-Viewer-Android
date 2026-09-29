@@ -39,6 +39,10 @@ android.api = 33
 # (int) Minimum Android API
 android.minapi = 24
 
+# (bool) Automatically accept Android SDK licenses during the build
+# (وگرنه نصب build-tools با «license is not accepted» می‌میرد)
+android.accept_sdk_license = True
+
 # (bool) enables Android auto backup feature (Android API >=23)
 android.backup_rules =
 
