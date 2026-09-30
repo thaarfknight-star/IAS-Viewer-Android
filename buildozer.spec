@@ -21,7 +21,7 @@ version = 2.0.80
 # (list) Application requirements
 # kivy: UI | opencv: پخش زنده‌ی دوربین (RTSP/HTTP) | numpy/pillow: فریم
 # arabic-reshaper + python-bidi: نمایش درست متن فارسی در Kivy
-requirements = python3,kivy,opencv,numpy,pillow,arabic-reshaper,python-bidi
+requirements = python3,kivy,opencv,numpy,pillow,arabic-reshaper,python-bidi,charset-normalizer==3.4.1
 
 # (str) Supported orientations: landscape, portrait, sensor, all ...
 orientation = landscape
