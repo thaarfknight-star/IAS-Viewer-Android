@@ -1,7 +1,7 @@
 name: Build Android APK
 
-# بیلد را طه خودش تریگر می‌کند (قانون: بیلدها را خودم می‌زنم) —
-# فقط دستی از تب Actions، نه با هر push.
+# بیلد را واچ‌داگ (IVAagent) بعد از هر فیکس تریگر می‌کند؛
+# اجرای دستی هم از تب Actions ممکن است. با هر push بیلد گرفته نمی‌شود.
 on:
   workflow_dispatch:
 
@@ -49,13 +49,30 @@ jobs:
           pip3 install "cython==0.29.33" buildozer
           buildozer --version
 
-      - name: Clear stale p4a venv
+      - name: Prepare p4a venv (pip pin)
         run: |
-          # اگر venv کش‌شده‌ی p4a از بیلد قبلی خراب مانده باشد (pip ناقص/میکس‌شده)،
-          # ‏python -m venv آن را ترمیم نمی‌کند و «pip install -U pip» با ImportError
-          # می‌میرد. حذفش می‌کنیم تا تازه ساخته شود؛ رسیپی‌های کامپایل‌شده
+          # حذف venv کش‌شده‌ی خراب p4a تا تازه ساخته شود؛ رسیپی‌های کامپایل‌شده
           # دست‌نخورده می‌مانند (بیلد افزایشی).
           rm -rf .buildozer/android/platform/build-*/build/venv
+          # علت فیکس: p4a به‌ازای هر arch یک‌بار «python -m venv venv» را روی همان
+          # دایرکتوری اجرا می‌کند. در arch اول، «pip install -U pip» نسخه‌ی venv را
+          # به آخرین نسخه‌ی PyPI (مثلاً 26.x) ارتقا می‌دهد؛ ولی در arch دوم،
+          # ensurepip نسخه‌ی قدیمیِ باندل‌شده‌ی hostpython (مثلاً 25.3) را روی آن
+          # نصب می‌کند. این دانگریدِ pipِ در حال اجرا، فایل‌هایش را قاطی می‌کند
+          # (installer.py جدید + exceptions.py قدیمی) و از آن به بعد هر فراخوانی
+          # pip با «ImportError: cannot import name 'BuildDependencyInstallError'»
+          # می‌میرد (مشاهده‌شده در ران 37592892831).
+          # راه‌حل: pip را روی همان نسخه‌ی باندل‌شده‌ی hostpython پین می‌کنیم تا
+          # «pip install -U pip» عملاً no-op شود و venv در هر دو arch یکدست بماند.
+          HP_PY="$(ls .buildozer/android/platform/build-*/build/other_builds/hostpython3/desktop/hostpython3/native-build/root/usr/local/bin/python 2>/dev/null | head -1)"
+          BUNDLED_PIP=""
+          if [ -n "$HP_PY" ]; then
+            BUNDLED_PIP="$("$HP_PY" -c 'import ensurepip; print(ensurepip.version())' 2>/dev/null)"
+          fi
+          : "${BUNDLED_PIP:=25.3}"
+          printf 'pip==%s\n' "$BUNDLED_PIP" > /tmp/pip-constraint.txt
+          echo "PIP_CONSTRAINT=/tmp/pip-constraint.txt" >> "$GITHUB_ENV"
+          echo "venv pip pinned to $BUNDLED_PIP"
 
       - name: Build APK
         run: buildozer android debug
