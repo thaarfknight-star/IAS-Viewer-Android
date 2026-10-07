@@ -2,8 +2,7 @@
 """IAS Viewer — نسخه‌ی اندروید (Kivy).
 
 نسخه‌ی مینیمال: فقط «صفحه‌ی اصلی» (پخش زنده‌ی دوربین‌ها) و «تنظیمات»
-(مدیریت دوربین‌ها + تغییر رمز). ورود با همان کاربران نسخه‌ی دسکتاپ:
-admin / Aa@@Sorena و Test / 123456 (فقط همین دو صفحه).
+(مدیریت دوربین‌ها + تغییر رمز). ورود با همان کاربران نسخه‌ی دسکتاپ.
 """
 import os
 
@@ -13,6 +12,7 @@ kivy.require("2.0.0")
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.graphics import Color, Line, RoundedRectangle
 from kivy.graphics.texture import Texture
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -51,6 +51,12 @@ C_TEXT = (0.93, 0.93, 0.95, 1)
 C_MUTED = (0.62, 0.65, 0.70, 1)
 C_OK = (0.25, 0.75, 0.40, 1)
 C_ERR = (0.95, 0.35, 0.35, 1)
+# پالت تایل ویندوز (CameraSlotWidget در نسخه‌ی دسکتاپ)
+C_TILE = (0.149, 0.149, 0.149, 1)          # #262626
+C_TILE_BORDER = (0.227, 0.227, 0.227, 1)   # #3a3a3a
+C_VIDEO_BG = (0.118, 0.118, 0.118, 1)      # #1e1e1e
+C_SELECT = (0.204, 0.596, 0.859, 1)        # #3498db (بوردر تایل انتخاب‌شده)
+C_NAME = (0.867, 0.867, 0.867, 1)          # #dddddd
 
 
 def mk_label(text, bold=False, size="15sp", color=C_TEXT, halign="right",
@@ -94,28 +100,85 @@ def mk_input(hint="", password=False, multiline=False):
 
 # ----------------------------------------------------------------------------
 class CameraTile(BoxLayout):
-    """یک کاشی دوربین: نام + وضعیت + تصویر زنده. لمس → تمام‌صفحه."""
+    """یک کاشی دوربین عین نسخه‌ی ویندوز: قاب #262626 با بوردر گرد، هدر
+    (نام بولد + دکمه‌ی 🔊 صدا مثل ویندوز)، ناحیه‌ی ویدیوی #1e1e1e با گوشه‌ی
+    گرد، و خط وضعیت پایین. تک‌لمس = انتخاب (بوردر آبی #3498db مثل ویندوز)،
+    دابل‌تپ = تمام‌صفحه (معادل دابل‌کلیک ویندوز)."""
 
     def __init__(self, cam, **kwargs):
         super().__init__(**kwargs)
         self.orientation = "vertical"
         self.cam = cam
         self.worker = None
-        self.padding = dp(4)
+        self.selected = False
+        self.padding = dp(6)
         self.spacing = dp(4)
 
-        top = BoxLayout(orientation="horizontal", size_hint_y=None,
-                        height=dp(30))
-        self.name_lbl = mk_label(cam.get("name") or "?", bold=True,
-                                 size="14sp", halign="right")
-        self.status_lbl = mk_label("…", size="12sp", color=C_MUTED,
-                                   halign="left")
-        top.add_widget(self.name_lbl)
-        top.add_widget(self.status_lbl)
-        self.add_widget(top)
+        # قاب ویندوزی
+        with self.canvas.before:
+            Color(*C_TILE)
+            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size,
+                                             radius=[dp(8)])
+            self._border_color = Color(*C_TILE_BORDER)
+            self._border_line = Line(
+                rounded_rectangle=(self.x, self.y, self.width, self.height,
+                                   dp(8)),
+                width=dp(1))
+        self.bind(pos=self._redraw_tile, size=self._redraw_tile)
 
+        # هدر: نام + دکمه‌ی صدا
+        header = BoxLayout(orientation="horizontal", size_hint_y=None,
+                           height=dp(34), spacing=dp(4))
+        self.name_lbl = mk_label(cam.get("name") or "؟", bold=True,
+                                 size="13sp", color=C_NAME, halign="right")
+        self.audio_btn = Button(text="\U0001F50A", font_size="16sp",
+                                size_hint=(None, None), size=(dp(36), dp(34)),
+                                background_color=(0, 0, 0, 0), color=C_TEXT)
+        self.audio_btn.bind(on_press=self._on_audio)
+        header.add_widget(self.name_lbl)
+        header.add_widget(self.audio_btn)
+        self.add_widget(header)
+
+        # ناحیه‌ی ویدیو: #1e1e1e با گوشه‌ی گرد
+        vbox = BoxLayout(padding=dp(2))
+        with vbox.canvas.before:
+            Color(*C_VIDEO_BG)
+            self._video_rect = RoundedRectangle(pos=vbox.pos, size=vbox.size,
+                                               radius=[dp(6)])
+        vbox.bind(pos=self._redraw_video, size=self._redraw_video)
         self.img = Image(allow_stretch=True, keep_ratio=True)
-        self.add_widget(self.img)
+        vbox.add_widget(self.img)
+        self.add_widget(vbox)
+
+        # خط وضعیت پایین (مثل ویندوز)
+        self.status_lbl = mk_label("…", size="11sp", color=C_MUTED,
+                                   halign="right", height=dp(20))
+        self.add_widget(self.status_lbl)
+
+    # ------------------------------------------------------------ رسم --
+    def _redraw_tile(self, *args):
+        self._bg_rect.pos = self.pos
+        self._bg_rect.size = self.size
+        self._border_line.rounded_rectangle = (
+            self.x, self.y, self.width, self.height, dp(8))
+
+    def _redraw_video(self, inst, val):
+        self._video_rect.pos = inst.pos
+        self._video_rect.size = inst.size
+
+    def set_selected(self, sel):
+        self.selected = sel
+        if sel:
+            self._border_color.rgba = C_SELECT
+            self._border_line.width = dp(2)
+        else:
+            self._border_color.rgba = C_TILE_BORDER
+            self._border_line.width = dp(1)
+
+    def _on_audio(self, *_):
+        app = App.get_running_app()
+        if app:
+            app.toast("پخش صدا به‌زودی فعال می‌شود")
 
     # ------------------------------------------------------------- استریم --
     def start(self):
@@ -157,7 +220,7 @@ class CameraTile(BoxLayout):
     def _show_state(self, state):
         mapping = {
             "connecting": ("در حال اتصال…", C_MUTED),
-            "live": ("● زنده", C_OK),
+            "live": ("متصل - پخش زنده", C_OK),
             "error": ("قطع — تلاش مجدد…", C_ERR),
         }
         txt, col = mapping.get(state, ("…", C_MUTED))
@@ -165,15 +228,21 @@ class CameraTile(BoxLayout):
         self.status_lbl.color = col
 
     def on_touch_down(self, touch):
+        # اول بچه‌ها (دکمه‌ی 🔊) فرصت بگیرند
+        if super().on_touch_down(touch):
+            return True
         if self.collide_point(*touch.pos):
             app = App.get_running_app()
-            if app:
-                app.root.get_screen("main").open_viewer(self)
+            main = app.root.get_screen("main") if app else None
+            if main is not None:
+                if touch.is_double_tap:
+                    main.open_viewer(self)
+                else:
+                    main.select_tile(self)
             return True
-        return super().on_touch_down(touch)
+        return False
 
 
-# ----------------------------------------------------------------------------
 class LoginScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -273,6 +342,12 @@ class MainScreen(Screen):
         vheader.add_widget(mk_button("◀ بازگشت", self.close_viewer,
                                      bg=(0.25, 0.30, 0.38, 1)))
         vheader.add_widget(mk_label("پخش زنده", bold=True, size="16sp"))
+        audio_v = Button(text="\U0001F50A", font_size="16sp",
+                         size_hint=(None, None), size=(dp(44), dp(44)),
+                         background_color=(0, 0, 0, 0), color=C_TEXT)
+        audio_v.bind(on_press=lambda *_: App.get_running_app().toast(
+            "پخش صدا به‌زودی فعال می‌شود"))
+        vheader.add_widget(audio_v)
         self.viewer.add_widget(vheader)
         self.viewer_slot = BoxLayout(orientation="vertical")
         self.viewer.add_widget(self.viewer_slot)
@@ -334,6 +409,14 @@ class MainScreen(Screen):
             self.tiles.append(tile)
             self.grid.add_widget(tile)
             tile.start()
+
+    def select_tile(self, tile):
+        # مثل ویندوز: تک‌کلیک فقط انتخاب می‌کند (بوردر آبی)
+        for t in self.tiles:
+            if t is not tile and t.selected:
+                t.set_selected(False)
+        if not tile.selected:
+            tile.set_selected(True)
 
     # -------------------------------------------------------- تمام‌صفحه --
     def open_viewer(self, tile):
@@ -586,6 +669,15 @@ class IASViewerApp(App):
         btns.add_widget(mk_button("ذخیره", save))
         box.add_widget(btns)
         popup.open()
+
+    def toast(self, msg):
+        """پیام کوتاه محو‌شونده (جایگزین Toast اندروید)."""
+        popup = Popup(title="", content=mk_label(msg, halign="center"),
+                      size_hint=(0.85, None), height=dp(64),
+                      background_color=(0.15, 0.16, 0.19, 1),
+                      separator_height=0)
+        popup.open()
+        Clock.schedule_once(lambda dt: popup.dismiss(), 1.6)
 
     def on_stop(self):
         try:
