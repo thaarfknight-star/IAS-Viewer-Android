@@ -4,7 +4,7 @@
 title = IAS Viewer
 
 # (str) Package name
-package.name = iasviewer
+package.name = IASViewer
 
 # (str) Package domain (needed for android/ios packaging)
 package.domain = org.iasviewer
