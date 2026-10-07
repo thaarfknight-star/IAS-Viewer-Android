@@ -102,12 +102,16 @@ jobs:
           python3 .github/workflows/patch_p4a.py
 
       - name: Build APK
-        # گرِدل پلاگین اندروید (AGP 8.x) به جاوا ۱۷ نیاز دارد؛ بدون JAVA_HOME
-        # ست‌شده، gradlew از جاوا ۱۱ پیش‌فرض رانر استفاده می‌کند و با
-        # «Android Gradle plugin requires Java 17» می‌میرد (مشاهده‌شده در ران ۱۲).
-        env:
-          JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
-        run: buildozer android debug
+        run: |
+          # گرِدل پلاگین اندروید (AGP 8.x) به جاوا ۱۷ نیاز دارد؛ بدون JAVA_HOME
+          # درست، gradlew از جاوا ۱۱ پیش‌فرض رانر استفاده می‌کند و با
+          # «Android Gradle plugin requires Java 17» می‌میرد (مشاهده‌شده در ران ۱۲).
+          # نکته: ${{ env.JAVA_HOME_17_X64 }} همیشه خالی است چون متغیر محیطی رانر
+          # در کانتکست env گیت‌هاب نیست؛ باید در شل خوانده شود.
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          test -x "$JAVA_HOME/bin/javac" || { echo "FAIL: JAVA_HOME_17_X64 usable نیست: [$JAVA_HOME]"; exit 1; }
+          "$JAVA_HOME/bin/java" -version
+          buildozer android debug
 
       - name: Rename APK (نام خروجی با ANDROID)
         run: |
