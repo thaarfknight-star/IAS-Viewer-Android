@@ -49,6 +49,14 @@ jobs:
           pip3 install "cython==0.29.33" buildozer
           buildozer --version
 
+      - name: Clear stale p4a venv
+        run: |
+          # اگر venv کش‌شده‌ی p4a از بیلد قبلی خراب مانده باشد (pip ناقص/میکس‌شده)،
+          # ‏python -m venv آن را ترمیم نمی‌کند و «pip install -U pip» با ImportError
+          # می‌میرد. حذفش می‌کنیم تا تازه ساخته شود؛ رسیپی‌های کامپایل‌شده
+          # دست‌نخورده می‌مانند (بیلد افزایشی).
+          rm -rf .buildozer/android/platform/build-*/build/venv
+
       - name: Build APK
         run: buildozer android debug
 
