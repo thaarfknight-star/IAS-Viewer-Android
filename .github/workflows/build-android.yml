@@ -74,6 +74,19 @@ jobs:
           echo "PIP_CONSTRAINT=/tmp/pip-constraint.txt" >> "$GITHUB_ENV"
           echo "venv pip pinned to $BUNDLED_PIP"
 
+      - name: Patch p4a (accept android wheels)
+        run: |
+          # روی cold-cache، buildozer خودش p4a را وسط بیلد کلون می‌کند؛ اگر
+          # دایرکتوری‌اش نبود، خودمان با همان آدرس/برانچی که buildozer انتظار
+          # دارد کلون می‌کنیم تا از همین کپیِ پچ‌شده استفاده کند.
+          P4A_DIR=.buildozer/android/platform/python-for-android
+          if [ ! -d "$P4A_DIR" ]; then
+            mkdir -p .buildozer/android/platform
+            git clone -b master --single-branch \
+              https://github.com/kivy/python-for-android.git "$P4A_DIR"
+          fi
+          python3 .github/workflows/patch_p4a.py
+
       - name: Build APK
         run: buildozer android debug
 
