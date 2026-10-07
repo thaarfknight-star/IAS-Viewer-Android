@@ -27,7 +27,7 @@ requirements = python3,kivy,opencv,numpy,pillow,arabic-reshaper,python-bidi
 
 # (str) Supported orientations: landscape, portrait, sensor, all ...
 # عمودی پیش‌فرض؛ با چرخش گوشی، افقی هم کاملاً قابل استفاده است
-orientation = sensor
+orientation = all
 # آیکون برنامه = آیکون نسخه‌ی ویندوز (assets/app.ico)
 icon.filename = %(source.dir)s/assets/icon.png
 
