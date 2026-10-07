@@ -41,6 +41,13 @@ android.api = 33
 # (int) Minimum Android API
 android.minapi = 24
 
+# (int) Numeric versionCode for the APK. The real value comes from the
+# APP_ANDROID_NUMERIC_VERSION env var set by the workflow (buildozer
+# replaces config tokens with matching env vars); this is only a fallback.
+# Needed because version.txt is like '2.0.80-beta' and p4a cannot turn the
+# '-beta' suffix into a number (int('80-beta') crashes make_package).
+android.numeric_version = 102420080
+
 # (bool) Automatically accept Android SDK licenses during the build
 # (وگرنه نصب build-tools با «license is not accepted» می‌میرد)
 android.accept_sdk_license = True

@@ -17,6 +17,20 @@ jobs:
           ver="$(tr -d '\r\n ' < version.txt)"
           echo "APP_VERSION=$ver" >> "$GITHUB_ENV"
           echo "APP_VERSION=$ver"
+          # buildozer مقدار version را با APP_VERSION جایگزین می‌کند
+          # (set_config_from_envs) و p4a نمی‌تواند '2.0.80-beta' را به
+          # versionCode عددی تبدیل کند (int('80-beta') در make_package).
+          # پس versionCode را با همان فرمول p4a از پیشوند عددی نسخه حساب
+          # می‌کنیم و جدا با android.numeric_version می‌دهیم.
+          num="$(printf '%s' "$ver" | sed -E 's/^([0-9]+(\.[0-9]+)*).*/\1/')"
+          code=0
+          for part in $(printf '%s' "$num" | tr '.' ' '); do
+            code=$((code * 100 + part))
+          done
+          minsdk="$(grep -E '^android\.minapi' buildozer.spec | head -1 | sed -E 's/[^0-9]//g')"
+          : "${minsdk:=24}"
+          echo "APP_ANDROID_NUMERIC_VERSION=10${minsdk}${code}" >> "$GITHUB_ENV"
+          echo "APP_ANDROID_NUMERIC_VERSION=10${minsdk}${code}"
 
       - name: Cache Buildozer global directory
         uses: actions/cache@v4
