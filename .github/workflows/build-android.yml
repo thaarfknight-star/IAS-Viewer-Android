@@ -102,6 +102,11 @@ jobs:
           python3 .github/workflows/patch_p4a.py
 
       - name: Build APK
+        # گرِدل پلاگین اندروید (AGP 8.x) به جاوا ۱۷ نیاز دارد؛ بدون JAVA_HOME
+        # ست‌شده، gradlew از جاوا ۱۱ پیش‌فرض رانر استفاده می‌کند و با
+        # «Android Gradle plugin requires Java 17» می‌میرد (مشاهده‌شده در ران ۱۲).
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
         run: buildozer android debug
 
       - name: Rename APK (نام خروجی با ANDROID)
@@ -118,3 +123,4 @@ jobs:
         with:
           name: IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}
           path: dist/IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}.apk
+
