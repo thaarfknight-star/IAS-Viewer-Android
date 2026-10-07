@@ -26,7 +26,10 @@ version = 2.0.80
 requirements = python3,kivy,opencv,numpy,pillow,arabic-reshaper,python-bidi
 
 # (str) Supported orientations: landscape, portrait, sensor, all ...
-orientation = landscape
+# عمودی پیش‌فرض؛ با چرخش گوشی، افقی هم کاملاً قابل استفاده است
+orientation = sensor
+# آیکون برنامه = آیکون نسخه‌ی ویندوز (assets/app.ico)
+icon.filename = %(source.dir)s/assets/icon.png
 
 # (bool) Indicate if the application should be fullscreen or not
 fullscreen = 0
