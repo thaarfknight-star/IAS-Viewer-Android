@@ -12,6 +12,7 @@ kivy.require("2.0.0")
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.graphics.texture import Texture
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -52,9 +53,23 @@ C_OK = (0.25, 0.75, 0.40, 1)
 C_ERR = (0.95, 0.35, 0.35, 1)
 
 
-def mk_label(text, bold=False, size="15sp", color=C_TEXT, halign="right"):
-    return Label(text=fa(text), font_name=FONT_BOLD if bold else FONT,
-                 font_size=size, color=color, halign=halign, valign="middle")
+def mk_label(text, bold=False, size="15sp", color=C_TEXT, halign="right",
+             height=None):
+    lbl = Label(text=fa(text), font_name=FONT_BOLD if bold else FONT,
+                font_size=size, color=color, halign=halign, valign="middle")
+    # بدون text_size، halign/valign اثری ندارد
+    lbl.bind(size=lbl.setter("text_size"))
+    if height is not None:
+        # در باکس‌های اسکرول‌شونده، لیبل بدون ارتفاع مشخص روی هم می‌خوابد
+        lbl.size_hint_y = None
+        lbl.height = height
+    return lbl
+
+
+def fa_ltr(text):
+    """متن لاتین/عددی داخل متن فارسی: با LRE/PDF از به‌هم‌ریختگی bidi
+    جلوگیری می‌کند (مثلاً '2.0.80-beta' که 'beta-2.0.80' نمایش داده می‌شد)."""
+    return "\u202A%s\u202C" % text
 
 
 def mk_button(text, on_press, bg=C_ACCENT, size_hint_y=None, height=None):
@@ -241,6 +256,8 @@ class MainScreen(Screen):
         self.grid = GridLayout(cols=2, spacing=dp(8), padding=dp(8),
                                size_hint_y=None)
         self.grid.bind(minimum_height=self.grid.setter("height"))
+        Window.bind(size=self._adapt_grid)
+        self._adapt_grid()
         self.scroll.add_widget(self.grid)
         self.body.add_widget(self.scroll)
         self.empty_lbl = mk_label(
@@ -291,6 +308,10 @@ class MainScreen(Screen):
         app.root.current = "settings"
 
     # -------------------------------------------------------------- گرید --
+    def _adapt_grid(self, *_):
+        # عمودی: ۲ ستون، افقی: ۳ ستون — در هر دو جهت قابل استفاده
+        self.grid.cols = 2 if Window.height > Window.width else 3
+
     def stop_all(self):
         for t in self.tiles:
             t.stop()
@@ -382,11 +403,12 @@ class SettingsScreen(Screen):
         app = App.get_running_app()
         u = app.current_user or {}
         self.content.add_widget(mk_label("کاربر: %s" % u.get("username", ""),
-                                         size="14sp", color=C_MUTED))
+                                         size="14sp", color=C_MUTED,
+                                         height=dp(28)))
 
         # --- دوربین‌ها ---
         self.content.add_widget(mk_label("دوربین‌ها", bold=True,
-                                         size="17sp"))
+                                         size="17sp", height=dp(36)))
         for cam in app.cameras.cameras:
             row = BoxLayout(orientation="horizontal", size_hint_y=None,
                             height=dp(48), spacing=dp(6))
@@ -406,11 +428,12 @@ class SettingsScreen(Screen):
 
         # --- تغییر رمز ---
         self.content.add_widget(mk_label("تغییر رمز عبور", bold=True,
-                                         size="17sp"))
+                                         size="17sp", height=dp(36)))
         self.old_pw = mk_input("رمز فعلی", password=True)
         self.new_pw = mk_input("رمز جدید", password=True)
         self.new_pw2 = mk_input("تکرار رمز جدید", password=True)
-        self.pw_msg = mk_label("", size="13sp", halign="center")
+        self.pw_msg = mk_label("", size="13sp", halign="center",
+                               height=dp(28))
         self.content.add_widget(self.old_pw)
         self.content.add_widget(self.new_pw)
         self.content.add_widget(self.new_pw2)
@@ -420,9 +443,9 @@ class SettingsScreen(Screen):
         self.content.add_widget(self.pw_msg)
 
         # --- نسخه ---
-        self.content.add_widget(mk_label("نسخه‌ی برنامه: %s" % VERSION,
-                                         size="13sp", color=C_MUTED,
-                                         halign="center"))
+        self.content.add_widget(mk_label(
+            "نسخه‌ی برنامه: %s" % fa_ltr(VERSION),
+            size="13sp", color=C_MUTED, halign="center", height=dp(28)))
 
     # ------------------------------------------------------- دوربین‌ها --
     def cam_form(self, cam):
