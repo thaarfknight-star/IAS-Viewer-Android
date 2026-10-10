@@ -112,16 +112,10 @@ def mk_button(text, on_press, bg=BRAND_BLUE, fg=C_TEXT, bold=True,
 
 
 def mk_input(hint, text="", password=False):
-    # بدون hint_text فارسی (مشکل فونت) - فقط متن لاتین
-    t = TextInput(text=text,
-                  font_size="15sp", password=password, multiline=False,
-                  size_hint_y=None, height=dp(52),
-                  background_normal="", background_active="",
-                  background_color=C_SURFACE,
-                  foreground_color=C_TEXT,
-                  cursor_color=BRAND_BLUE_LT)
-    rounded_bg(t, C_SURFACE, RADIUS_SM)
-    t.padding = [dp(14), dp(14), dp(14), dp(14)]
+    # نسخه‌ی ساده بدون استایل سفارشی برای دیباگ
+    t = TextInput(hint_text=hint, text=text,
+                  font_size="16sp", password=password, multiline=False,
+                  size_hint_y=None, height=dp(52))
     return t
 
 
