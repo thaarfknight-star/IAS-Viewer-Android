@@ -55,14 +55,25 @@ C_MUTED = (0.608, 0.592, 0.549, 1)   # #9b978c متن کم‌رنگ
 C_OK = (0.25, 0.75, 0.40, 1)
 C_ERR = (0.906, 0.298, 0.235, 1)     # #e74c3c خطر
 
-# مسیرهای رایج استریم دوربین تکی
+# مسیرهای استریم — لیست کامل ویندوز (CANDIDATE_PATHS در add_camera_dialog.py)
 CANDIDATE_PATHS = [
     "live/ch0",
-    "cam/realmonitor?channel=1&subtype=0",
-    "Streaming/Channels/101",
-    "h264/ch1/main/av_stream",
+    "snscview",
     "live/main",
+    "live/ch1",
+    "ch0",
+    "h264/ch1/main/av_stream",
+    "cam/realmonitor?channel=1&subtype=0",
+    "cam/realmonitor?channel=1&subtype=1",
+    "Streaming/Channels/101",
+    "Streaming/Channels/1",
+    "h264Preview_01_main",
+    "stream1",
+    "video1",
+    "media/video1",
     "onvif1",
+    "profile1",
+    "",
 ]
 
 
@@ -498,14 +509,28 @@ class MainScreen(Screen):
         box = BoxLayout(orientation="vertical", spacing=dp(8),
                         padding=dp(12))
 
-        # دکمه‌ی اسکن شبکه — IP پیدا شده را در فرم پر می‌کند
-        def _pick_ip(ip):
-            ip_in.text = ip
-            if not name_in.text.strip():
-                name_in.text = ip
+        # دکمه‌ی اسکن شبکه — دیالوگ را می‌بندد، اسکن را باز می‌کند،
+        # بعد با IP انتخاب‌شده برمی‌گردد (بدون پاپ‌آپ تودرتو)
+        def _open_scan_from_form(*_):
+            state = {
+                "name": name_in.text, "ip": ip_in.text,
+                "port": port_in.text, "user": user_in.text,
+                "pass": pass_in.text, "path": path_in.text,
+                "channel": chan_in.text, "type": cam_type["v"],
+            }
+            detect_state["cancel"] = True
+            popup.dismiss()
+
+            def _on_ip_picked(ip):
+                state["ip"] = ip
+                if not state["name"].strip():
+                    state["name"] = ip
+                self.cam_form(cam, prefill=state)
+
+            self.open_scan(_on_ip_picked)
 
         box.add_widget(mk_button("اسکن شبکه",
-                                 lambda *_: self.open_scan(_pick_ip),
+                                 _open_scan_from_form,
                                  bg=(0.25, 0.30, 0.38, 1),
                                  size_hint_y=None, height=dp(48)))
 
@@ -545,21 +570,6 @@ class MainScreen(Screen):
         chan_in.opacity = 0
         chan_in.height = 0
 
-        if not is_new:
-            name_in.text = cam.get("name", "")
-            ip_in.text = cam.get("ip", "")
-            port_in.text = str(cam.get("port", "554") or "554")
-            user_in.text = cam.get("user", "")
-            pass_in.text = cam.get("pass", "")
-            if cam.get("nvr_channel"):
-                set_type("nvr")
-                chan_in.text = str(cam.get("nvr_channel"))
-        for k, w in (("name", name_in), ("ip", ip_in), ("user", user_in)):
-            if prefill.get(k):
-                w.text = prefill[k]
-        if prefill.get("pass"):
-            pass_in.text = prefill["pass"]
-
         from kivy.uix.checkbox import CheckBox
         auto_box = BoxLayout(orientation="horizontal", size_hint_y=None,
                              height=dp(40), spacing=dp(6))
@@ -570,6 +580,34 @@ class MainScreen(Screen):
         path_in = mk_input("مسیر دستی (مثلاً live/ch0)")
         path_in.disabled = True
         auto_chk.bind(active=lambda _i, v: setattr(path_in, "disabled", v))
+
+        if not is_new:
+            name_in.text = cam.get("name", "")
+            ip_in.text = cam.get("ip", "")
+            port_in.text = str(cam.get("port", "554") or "554")
+            user_in.text = cam.get("user", "")
+            pass_in.text = cam.get("pass", "")
+            if cam.get("nvr_channel"):
+                set_type("nvr")
+                chan_in.text = str(cam.get("nvr_channel"))
+        # بازیابی وضعیت (از prefill: اسکن شبکه یا مقادیر اولیه)
+        if prefill.get("name"):
+            name_in.text = prefill["name"]
+        if prefill.get("ip"):
+            ip_in.text = prefill["ip"]
+        if prefill.get("port"):
+            port_in.text = prefill["port"]
+        if prefill.get("user"):
+            user_in.text = prefill["user"]
+        if prefill.get("pass"):
+            pass_in.text = prefill["pass"]
+        if prefill.get("path"):
+            path_in.text = prefill["path"]
+            auto_chk.active = False
+        if prefill.get("channel"):
+            chan_in.text = prefill["channel"]
+        if prefill.get("type") == "nvr":
+            set_type("nvr")
 
         msg = mk_label("", size="13sp", color=C_ERR, halign="center",
                        height=dp(32))
