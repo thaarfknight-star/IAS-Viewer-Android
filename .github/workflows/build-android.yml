@@ -60,7 +60,7 @@ jobs:
       - name: Install Buildozer
         run: |
           pip3 install --upgrade pip
-          pip3 install "cython==0.29.33" buildozer
+          pip3 install "cython>=3.0,<4.0" buildozer
           buildozer --version
 
       - name: Downgrade FFmpeg to 6.1.2 for ffpyplayer

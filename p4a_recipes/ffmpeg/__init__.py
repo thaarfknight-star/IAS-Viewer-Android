@@ -5,7 +5,7 @@ from multiprocessing import cpu_count
 
 
 class FFMpegRecipe(Recipe):
-    version = '6.1.2'
+    version = '6.0.1'
     # Moved to github.com instead of ffmpeg.org to improve download speed
     url = 'https://www.ffmpeg.org/releases/ffmpeg-{version}.tar.xz'
     depends = [('sdl2', 'sdl3')]  # Need this to build correct recipe order
