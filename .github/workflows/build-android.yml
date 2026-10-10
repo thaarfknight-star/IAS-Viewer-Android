@@ -69,9 +69,18 @@ jobs:
           FFMPEG_RECIPE=".buildozer/android/platform/python-for-android/pythonforandroid/recipes/ffmpeg/__init__.py"
           if [ -f "$FFMPEG_RECIPE" ]; then
             cp p4a_recipes/ffmpeg/__init__.py "$FFMPEG_RECIPE"
-            echo "ffmpeg recipe downgraded to 6.1.2"
+            echo "ffmpeg recipe downgraded to 6.0.1"
           else
             echo "WARNING: ffmpeg recipe not found"
+          fi
+          # پچ رسیپی ffpyplayer: ارتقای Cython به 3.x در pyproject.toml
+          FFPY_RECIPE=".buildozer/android/platform/python-for-android/pythonforandroid/recipes/ffpyplayer/__init__.py"
+          if [ -f "$FFPY_RECIPE" ]; then
+            cp p4a_recipes/ffpyplayer/__init__.py "$FFPY_RECIPE"
+            find .buildozer/android/platform/python-for-android -name "__pycache__" -type d 2>/dev/null | xargs rm -rf
+            echo "ffpyplayer recipe patched (cython 3)"
+          else
+            echo "WARNING: ffpyplayer recipe not found"
           fi
           # حذف بیلد کش‌شده‌ی FFmpeg 8 تا تمیز با 6.0.1 بیلد شود
           find .buildozer -type d -name "ffmpeg-*" -path "*other_builds*" 2>/dev/null | while read d; do

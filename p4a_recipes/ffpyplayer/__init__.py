@@ -11,10 +11,20 @@ class FFPyPlayerRecipe(PyProjectRecipe):
 
     def prebuild_arch(self, arch):
         super().prebuild_arch(arch)
+        import os
+        build_dir = self.get_build_dir(arch.arch)
+        # پچ pyproject.toml: cython 0.29 با Python 3.14 سازگار نیست
+        ppt = join(build_dir, 'pyproject.toml')
+        if os.path.exists(ppt):
+            with open(ppt, 'r') as f:
+                content = f.read()
+            if 'cython~=0.29.36' in content:
+                content = content.replace('cython~=0.29.36', 'cython>=3.0,<4.0')
+                with open(ppt, 'w') as f:
+                    f.write(content)
         # حذف بلوک avfft.h از ffmpeg.pxi (در FFmpeg 8 حذف شده؛ کد مرده است)
         # مستقیم با پایتون انجام می‌شود تا مشکل کش پچ دور زده شود
-        import os
-        pxi = join(self.get_build_dir(arch.arch), 'ffpyplayer',
+        pxi = join(build_dir, 'ffpyplayer',
                    'includes', 'ffmpeg.pxi')
         if os.path.exists(pxi):
             with open(pxi, 'r') as f:
