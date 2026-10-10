@@ -18,7 +18,7 @@ def _dlog(msg):
     except Exception:
         pass
 
-_dlog("=== app started ===")
+_dlog("=== app started [cc4694c6] ===")
 import threading
 
 from kivy.app import App
