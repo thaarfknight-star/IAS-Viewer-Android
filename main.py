@@ -48,6 +48,11 @@ from network_scan import NetworkScanner
 _dlog('network_scan ok')
 from stream_worker import StreamWorker
 _dlog('stream_worker ok')
+try:
+    from ffpyplayer.player import MediaPlayer
+    _dlog('ffpyplayer import OK')
+except Exception as e:
+    _dlog('ffpyplayer import FAILED: ' + str(e))
 
 VERSION = "2.1.0"
 
