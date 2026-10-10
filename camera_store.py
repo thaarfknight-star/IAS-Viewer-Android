@@ -75,18 +75,20 @@ class CameraStore:
             json.dump({"cameras": self.cameras}, f, ensure_ascii=False, indent=1)
         os.replace(tmp, self.path)
 
-    def add(self, name, ip="", port="554", user="", pwd="", path="", url=""):
+    def add(self, name, ip="", port="554", user="", pwd="", path="", url="",
+            nvr_channel=""):
         cam = {"id": uuid.uuid4().hex[:8], "name": name.strip(),
                "ip": ip.strip(), "port": (port or "554").strip(),
                "user": user.strip(), "pass": pwd or "",
                "path": path.strip(), "url": url.strip(),
+               "nvr_channel": (nvr_channel or "").strip(),
                "enabled": True}
         self.cameras.append(cam)
         self.save()
         return cam
 
     def update(self, cam_id, name, ip="", port="554", user="", pwd="",
-               path="", url=""):
+               path="", url="", nvr_channel=""):
         for c in self.cameras:
             if c["id"] == cam_id:
                 c["name"] = name.strip()
@@ -96,6 +98,7 @@ class CameraStore:
                 c["pass"] = pwd or ""
                 c["path"] = path.strip()
                 c["url"] = url.strip()
+                c["nvr_channel"] = (nvr_channel or "").strip()
                 self.save()
                 return True
         return False
