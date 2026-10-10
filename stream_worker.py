@@ -22,7 +22,6 @@ FF_OPTS = {
 }
 
 LIB_OPTS = {
-    "rtsp_transport": "tcp",  # حتماً TCP
     "stimeout": "5000000",    # تایم‌اوت سوکت: ۵ ثانیه (میکروثانیه)
     "fflags": "nobuffer",     # تأخیر کم
 }
