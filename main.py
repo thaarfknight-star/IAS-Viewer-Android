@@ -11,12 +11,10 @@ import os
 import sys
 import traceback
 
-# لاگر شروع برنامه برای دیباگ کرش
 def _dlog(msg):
     try:
-        p = "/sdcard/Download/ias_startup.log"
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(msg + "\n")
+        with open("/sdcard/Download/ias_startup.log", "a", encoding="utf-8") as f:
+            f.write(msg + chr(10))
     except Exception:
         pass
 
@@ -37,7 +35,8 @@ from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
-from kivy.uix.widget import Widget\n_dlog('kivy imports ok')
+from kivy.uix.widget import Widget
+_dlog('kivy imports ok')
 
 from ptext import fa, fa_ltr, FONT, FONT_BOLD
 from user_store import UserStore
@@ -966,4 +965,9 @@ class IASViewerApp(App):
 
 
 if __name__ == "__main__":
-    IASViewerApp().run()
+    _dlog("starting app.run()")
+    try:
+        IASViewerApp().run()
+    except Exception:
+        _dlog("CRASH: " + traceback.format_exc())
+        raise
