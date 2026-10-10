@@ -28,12 +28,21 @@ LIB_OPTS = {
 }
 
 
+def _plog(msg):
+    try:
+        with open("/sdcard/Download/ias_probe.log", "a", encoding="utf-8") as f:
+            f.write(msg + chr(10))
+    except Exception:
+        pass
+
 def probe(url, timeout=8.0):
     """تست اتصال به استریم — True یعنی مسیر درست است."""
     try:
         from ffpyplayer.player import MediaPlayer
-    except Exception:
+    except Exception as e:
+        _plog("probe: ffpyplayer import failed: " + str(e))
         return False
+    _plog("probe: trying " + url)
     player = None
     try:
         player = MediaPlayer(url, ff_opts=dict(FF_OPTS),
@@ -45,6 +54,7 @@ def probe(url, timeout=8.0):
             except Exception:
                 break
             if meta.get("src_vid_size") not in (None, (0, 0)):
+                _plog("probe: SUCCESS " + url)
                 return True
             time.sleep(0.2)
         return False
