@@ -8,6 +8,19 @@
 - موتور استریم: ffpyplayer (RTSP روی TCP)
 """
 import os
+import sys
+import traceback
+
+# لاگر شروع برنامه برای دیباگ کرش
+def _dlog(msg):
+    try:
+        p = "/sdcard/Download/ias_startup.log"
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
+
+_dlog("=== app started ===")
 import threading
 
 from kivy.app import App
@@ -24,7 +37,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
-from kivy.uix.widget import Widget
+from kivy.uix.widget import Widget\n_dlog('kivy imports ok')
 
 from ptext import fa, fa_ltr, FONT, FONT_BOLD
 from user_store import UserStore
