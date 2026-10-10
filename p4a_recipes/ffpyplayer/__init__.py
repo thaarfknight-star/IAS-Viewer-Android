@@ -52,3 +52,5 @@ class FFPyPlayerRecipe(PyProjectRecipe):
         if 'ffpyplayer_codecs' not in self.ctx.recipe_build_order:
             env["CONFIG_POSTPROC"] = '0'
         return env
+
+recipe = FFPyPlayerRecipe()
