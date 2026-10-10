@@ -23,7 +23,7 @@ version = 2.0.80
 # arabic-reshaper + python-bidi: نمایش درست متن فارسی در Kivy
 # (1.0.0) پین charset-normalizer حذف شد — نسخه‌ی 3.4.1 با Python 3.14
 # ناسازگار بود؛ حالا آخرین نسخه‌ی سازگار خودکار انتخاب می‌شود.
-requirements = python3,kivy,ffpyplayer_ias,opencv,numpy,pillow,arabic-reshaper,python-bidi
+requirements = python3,kivy,ffpyplayer,opencv,numpy,pillow,arabic-reshaper,python-bidi
 
 # (str) Supported orientations: landscape, portrait, sensor, all ...
 # عمودی پیش‌فرض؛ با چرخش گوشی، افقی هم کاملاً قابل استفاده است
