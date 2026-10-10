@@ -73,8 +73,13 @@ jobs:
           else
             echo "WARNING: ffmpeg recipe not found"
           fi
-          # حذف بیلد کش‌شده‌ی FFmpeg 8 تا تمیز با 6.1.2 بیلد شود
+          # حذف بیلد کش‌شده‌ی FFmpeg 8 تا تمیز با 6.0.1 بیلد شود
           find .buildozer -type d -name "ffmpeg-*" -path "*other_builds*" 2>/dev/null | while read d; do
+            echo "removing cached $d"
+            rm -rf "$d"
+          done
+          # حذف بیلد کش‌شده‌ی ffpyplayer تا با Cython 3 دوباره ساخته شود
+          find .buildozer -type d -name "ffpyplayer-*" -path "*other_builds*" 2>/dev/null | while read d; do
             echo "removing cached $d"
             rm -rf "$d"
           done
