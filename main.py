@@ -39,10 +39,15 @@ from kivy.uix.widget import Widget
 _dlog('kivy imports ok')
 
 from ptext import fa, fa_ltr, FONT, FONT_BOLD
+_dlog('ptext ok')
 from user_store import UserStore
+_dlog('user_store ok')
 from camera_store import CameraStore, camera_url, build_rtsp_url
+_dlog('camera_store ok')
 from network_scan import NetworkScanner
+_dlog('network_scan ok')
 from stream_worker import StreamWorker
+_dlog('stream_worker ok')
 
 VERSION = "2.1.0"
 
