@@ -63,13 +63,22 @@ jobs:
           pip3 install "cython==0.29.33" buildozer
           buildozer --version
 
-      - name: Start ffpyplayer patch watcher
+      - name: Downgrade FFmpeg to 6.1.2 for ffpyplayer
         run: |
-          # واچر پس‌زمینه: به‌محض دانلود سورس ffpyplayer توسط p4a، فایل ffmpeg.pxi را پچ می‌کند
-          nohup python3 p4a_recipes/patch_watcher.py > /tmp/patcher.log 2>&1 &
-          echo "watcher started (pid $!)"
-          sleep 2
-          cat /tmp/patcher.log || true
+          # ffpyplayer 4.5.1 با FFmpeg 8 ناسازگار است — دانگرید به 6.1.2
+          FFMPEG_RECIPE=".buildozer/android/platform/python-for-android/pythonforandroid/recipes/ffmpeg/__init__.py"
+          if [ -f "$FFMPEG_RECIPE" ]; then
+            cp p4a_recipes/ffmpeg/__init__.py "$FFMPEG_RECIPE"
+            echo "ffmpeg recipe downgraded to 6.1.2"
+          else
+            echo "WARNING: ffmpeg recipe not found"
+          fi
+          # حذف بیلد کش‌شده‌ی FFmpeg 8 تا تمیز با 6.1.2 بیلد شود
+          find .buildozer -type d -name "ffmpeg-*" -path "*other_builds*" 2>/dev/null | while read d; do
+            echo "removing cached $d"
+            rm -rf "$d"
+          done
+          echo "ffmpeg downgrade done"
 
       - name: Prepare p4a venv (pip pin)
         run: |
