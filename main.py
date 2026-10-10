@@ -128,6 +128,12 @@ class CameraTile(BoxLayout):
         self.worker = None
         self.padding = dp(4)
         self.spacing = dp(2)
+        # پس‌زمینه‌ی مشکی — تا وقتی ویدیو نیست، سفید نشان ندهد
+        with self.canvas.before:
+            from kivy.graphics import Color, Rectangle
+            Color(0, 0, 0, 1)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._sync_bg, size=self._sync_bg)
 
         top = BoxLayout(orientation="horizontal", size_hint_y=None,
                         height=dp(28))
@@ -141,6 +147,10 @@ class CameraTile(BoxLayout):
 
         self.img = Image(allow_stretch=True, keep_ratio=True)
         self.add_widget(self.img)
+
+    def _sync_bg(self, *_):
+        self._bg.pos = self.pos
+        self._bg.size = self.size
 
     def start(self):
         self.stop()
@@ -184,7 +194,7 @@ class CameraTile(BoxLayout):
     def _show_state(self, state):
         mapping = {
             "connecting": ("در حال اتصال…", C_MUTED),
-            "live": ("● زنده", C_OK),
+            "live": ("• زنده", C_OK),
             "error": ("قطع — تلاش مجدد…", C_ERR),
         }
         txt, col = mapping.get(state, ("…", C_MUTED))
@@ -205,7 +215,7 @@ class EmptyTile(Button):
 
     def __init__(self, on_add, **kwargs):
         super().__init__(**kwargs)
-        self.text = fa("خالی\n＋ افزودن")
+        self.text = fa("خالی\n+ افزودن")
         self.font_name = FONT
         self.font_size = "16sp"
         self.color = C_MUTED
@@ -274,23 +284,21 @@ class MainScreen(Screen):
         # هدر
         header = BoxLayout(orientation="horizontal", size_hint_y=None,
                            height=dp(52), padding=dp(6), spacing=dp(6))
-        self.user_lbl = mk_label("", size="13sp", color=C_MUTED,
-                                 halign="left")
-        btn_settings = mk_button("⚙", self.goto_settings,
-                                 bg=(0.25, 0.30, 0.38, 1),
-                                 size_hint_x=0.16)
-        btn_add = mk_button("＋", self.add_camera,
+        btn_add = mk_button("+", self.add_camera,
                             bg=(0.25, 0.55, 0.35, 1),
-                            size_hint_x=0.16)
+                            size_hint_x=0.14)
         title = mk_label("IAS Viewer", bold=True, size="17sp")
+        title.size_hint_x = 0.42
+        btn_settings = mk_button("تنظیمات", self.goto_settings,
+                                 bg=(0.25, 0.30, 0.38, 1),
+                                 size_hint_x=0.24)
         btn_logout = mk_button("خروج", self.do_logout,
                                bg=(0.45, 0.25, 0.25, 1),
-                               size_hint_x=0.22)
-        header.add_widget(self.user_lbl)
-        header.add_widget(btn_logout)
+                               size_hint_x=0.20)
+        header.add_widget(btn_add)
         header.add_widget(title)
         header.add_widget(btn_settings)
-        header.add_widget(btn_add)
+        header.add_widget(btn_logout)
         root.add_widget(header)
 
         # گرید ۲×۲ ثابت
@@ -302,7 +310,7 @@ class MainScreen(Screen):
                                 height=0, opacity=0, disabled=True)
         vheader = BoxLayout(orientation="horizontal", size_hint_y=None,
                             height=dp(52), padding=dp(6))
-        vheader.add_widget(mk_button("◀ بازگشت", self.close_viewer,
+        vheader.add_widget(mk_button("بازگشت", self.close_viewer,
                                      bg=(0.25, 0.30, 0.38, 1)))
         vheader.add_widget(mk_label("پخش زنده", bold=True, size="16sp"))
         self.viewer.add_widget(vheader)
@@ -321,9 +329,7 @@ class MainScreen(Screen):
         self.stop_all()
 
     def refresh_user(self):
-        app = App.get_running_app()
-        u = app.current_user or {}
-        self.user_lbl.text = fa("کاربر: %s" % u.get("username", ""))
+        pass
 
     def do_logout(self, *_):
         self.on_leave()
@@ -420,7 +426,7 @@ class MainScreen(Screen):
                                  bg=(0.30, 0.32, 0.36, 1),
                                  size_hint_y=None, height=dp(48)))
 
-        popup = Popup(title=fa("📡 اسکن شبکه"), title_font=FONT,
+        popup = Popup(title=fa("اسکن شبکه"), title_font=FONT,
                       content=box, size_hint=(0.92, 0.85))
         scanner = {"t": None}
 
@@ -497,7 +503,7 @@ class MainScreen(Screen):
             if not name_in.text.strip():
                 name_in.text = ip
 
-        box.add_widget(mk_button("📡 اسکن شبکه",
+        box.add_widget(mk_button("اسکن شبکه",
                                  lambda *_: self.open_scan(_pick_ip),
                                  bg=(0.25, 0.30, 0.38, 1),
                                  size_hint_y=None, height=dp(48)))
@@ -505,9 +511,9 @@ class MainScreen(Screen):
         # انتخاب نوع: دوربین / NVR (مثل دکمه‌های ویندوز)
         type_box = BoxLayout(orientation="horizontal", size_hint_y=None,
                              height=dp(48), spacing=dp(8))
-        btn_type_cam = mk_button("🎥 دوربین", lambda *_: set_type("cam"),
+        btn_type_cam = mk_button("دوربین", lambda *_: set_type("cam"),
                                  bg=C_ACCENT)
-        btn_type_nvr = mk_button("🖥 NVR", lambda *_: set_type("nvr"),
+        btn_type_nvr = mk_button("NVR", lambda *_: set_type("nvr"),
                                  bg=(0.25, 0.30, 0.38, 1))
         type_box.add_widget(btn_type_cam)
         type_box.add_widget(btn_type_nvr)
@@ -588,7 +594,14 @@ class MainScreen(Screen):
 
         def do_save(name, ip, port, user, pwd, path, nvr_channel=""):
             app = App.get_running_app()
+            # جلوگیری از ثبت تکراری همان IP
             if is_new:
+                for c in app.cameras.cameras:
+                    if (c.get("ip") or "").strip() == ip:
+                        msg.text = fa("این دوربین قبلاً اضافه شده است.")
+                        msg.color = C_ERR
+                        set_busy(False)
+                        return
                 app.cameras.add(name, ip=ip, port=port, user=user,
                                 pwd=pwd, path=path,
                                 nvr_channel=nvr_channel)
@@ -741,10 +754,10 @@ class SettingsScreen(Screen):
         root = BoxLayout(orientation="vertical")
         header = BoxLayout(orientation="horizontal", size_hint_y=None,
                            height=dp(52), padding=dp(6), spacing=dp(6))
-        header.add_widget(mk_button("◀ بازگشت", self.go_back,
+        header.add_widget(mk_button("بازگشت", self.go_back,
                                     bg=(0.25, 0.30, 0.38, 1),
                                     size_hint_x=0.35))
-        header.add_widget(mk_label("⚙ تنظیمات", bold=True, size="17sp"))
+        header.add_widget(mk_label("تنظیمات", bold=True, size="17sp"))
         root.add_widget(header)
 
         scroll = ScrollView()
@@ -773,8 +786,8 @@ class SettingsScreen(Screen):
         for cam in app.cameras.cameras:
             row = BoxLayout(orientation="horizontal", size_hint_y=None,
                             height=dp(52), spacing=dp(6))
-            tag = "🖥" if cam.get("nvr_channel") else "🎥"
-            name = "%s %s" % (tag, cam.get("name") or "؟")
+            tag = "[NVR] " if cam.get("nvr_channel") else ""
+            name = "%s%s" % (tag, cam.get("name") or "؟")
             row.add_widget(mk_label(name, size="14sp", bold=True,
                                     size_hint_x=0.5))
             row.add_widget(mk_button("ویرایش",
