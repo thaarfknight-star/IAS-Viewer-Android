@@ -63,40 +63,13 @@ jobs:
           pip3 install "cython==0.29.33" buildozer
           buildozer --version
 
-      - name: Patch ffpyplayer source for FFmpeg 8
+      - name: Start ffpyplayer patch watcher
         run: |
-          # ffpyplayer 4.5.1 به libavcodec/avfft.h نیاز دارد که در FFmpeg 8 حذف شده.
-          # این کد مرده است — مستقیم از سورس کش‌شده حذفش می‌کنیم.
-          for PXI in $(find .buildozer -name "ffmpeg.pxi" -path "*ffpyplayer*" 2>/dev/null); do
-            echo "Patching $PXI"
-            PXI_PATH="$PXI" python3 <<'PYEOF2'
-          import os
-          pxi_path = os.environ['PXI_PATH']
-          with open(pxi_path, 'r') as f:
-              content = f.read()
-          old_block = """    extern from "libavcodec/avfft.h" nogil:
-              enum RDFTransformType:
-                  DFT_R2C,
-                  IDFT_C2R,
-                  IDFT_R2C,
-                  DFT_C2R,
-              struct RDFTContext:
-                  pass
-              void av_rdft_end(RDFTContext *)
-              RDFTContext *av_rdft_init(int, RDFTransformType)
-              void av_rdft_calc(RDFTContext *, FFTSample *)
-
-          """
-          if old_block in content:
-              content = content.replace(old_block, '')
-              with open(pxi_path, 'w') as f:
-                  f.write(content)
-              print("  patched OK")
-          else:
-              print("  block not found (already patched?)")
-          PYEOF2
-          done
-          echo "patch step done"
+          # واچر پس‌زمینه: به‌محض دانلود سورس ffpyplayer توسط p4a، فایل ffmpeg.pxi را پچ می‌کند
+          nohup python3 p4a_recipes/patch_watcher.py > /tmp/patcher.log 2>&1 &
+          echo "watcher started (pid $!)"
+          sleep 2
+          cat /tmp/patcher.log || true
 
       - name: Prepare p4a venv (pip pin)
         run: |
