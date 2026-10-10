@@ -63,21 +63,6 @@ jobs:
           pip3 install "cython==0.29.33" buildozer
           buildozer --version
 
-      - name: Patch ffpyplayer recipe for FFmpeg 8
-        run: |
-          # ffpyplayer 4.5.1 به libavcodec/avfft.h نیاز دارد که در FFmpeg 8 حذف شده.
-          # این کد مرده است (هیچ‌جا استفاده نمی‌شود) — مستقیم از رسیپی حذفش می‌کنیم.
-          # p4a در کش buildozer است (از بیلدهای قبلی کلون شده)
-          P4A_RECIPE=".buildozer/android/platform/python-for-android/pythonforandroid/recipes/ffpyplayer/__init__.py"
-          if [ -f "$P4A_RECIPE" ]; then
-            cp p4a_recipes/ffpyplayer/__init__.py "$P4A_RECIPE"
-            echo "ffpyplayer recipe patched"
-          else
-            echo "WARNING: p4a not in cache yet, will patch after clone"
-            # اگر کش نبود، بعد از کلون p4a توسط buildozer پچ می‌کنیم
-            # (این مرحله بعد از Restore cache اجرا می‌شود)
-          fi
-
       - name: Prepare p4a venv (pip pin)
         run: |
           # حذف venv کش‌شده‌ی خراب p4a تا تازه ساخته شود؛ رسیپی‌های کامپایل‌شده
