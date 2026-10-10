@@ -28,6 +28,7 @@ from kivy.uix.textinput import TextInput
 from ptext import fa, FONT, FONT_BOLD
 from user_store import UserStore
 from camera_store import CameraStore, camera_url, build_rtsp_url
+from network_scan import NetworkScanner
 from stream_worker import StreamWorker
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -397,11 +398,109 @@ class MainScreen(Screen):
         self.rebuild_grid()
 
     # ------------------------------------------- دیالوگ افزودن/ویرایش --
+    def open_scan(self, on_pick):
+        """پاپ‌آپ اسکن شبکه — با «افزودن» هر دستگاه، IP به فرم برمی‌گردد."""
+        box = BoxLayout(orientation="vertical", spacing=dp(8),
+                        padding=dp(12))
+        range_in = mk_input("رنج IP (مثلاً 192.168.1)", text="192.168.1")
+        box.add_widget(range_in)
+        scan_btn = mk_button("اسکن شبکه", lambda *_: None,
+                             size_hint_y=None, height=dp(48))
+        box.add_widget(scan_btn)
+        status = mk_label("", size="12sp", color=C_MUTED, halign="center",
+                          height=dp(28))
+        box.add_widget(status)
+        scroll = ScrollView()
+        results = BoxLayout(orientation="vertical", spacing=dp(6),
+                            size_hint_y=None)
+        results.bind(minimum_height=results.setter("height"))
+        scroll.add_widget(results)
+        box.add_widget(scroll)
+        box.add_widget(mk_button("بستن", lambda *_: close(),
+                                 bg=(0.30, 0.32, 0.36, 1),
+                                 size_hint_y=None, height=dp(48)))
+
+        popup = Popup(title=fa("📡 اسکن شبکه"), title_font=FONT,
+                      content=box, size_hint=(0.92, 0.85))
+        scanner = {"t": None}
+
+        def close():
+            s = scanner["t"]
+            if s and s.is_alive():
+                s.stop()
+            scanner["t"] = None
+            popup.dismiss()
+
+        def toggle(*_):
+            s = scanner["t"]
+            if s and s.is_alive():
+                s.stop()
+                scanner["t"] = None
+                scan_btn.text = fa("اسکن شبکه")
+                status.text = fa("متوقف شد.")
+                return
+            results.clear_widgets()
+            status.text = fa("در حال اسکن…")
+            scan_btn.text = fa("توقف")
+
+            def on_found(dev):
+                Clock.schedule_once(lambda dt: add_row(dev))
+
+            def on_done(devs):
+                Clock.schedule_once(lambda dt: done(devs))
+
+            scanner["t"] = NetworkScanner(range_in.text,
+                                         on_found=on_found,
+                                         on_done=on_done)
+            scanner["t"].start()
+
+        def add_row(dev):
+            ip = dev["ip"]
+            ports = ", ".join(str(p) for p in dev["ports"])
+            row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                            height=dp(52), spacing=dp(6))
+            row.add_widget(mk_label("%s\n%s" % (fa_ltr(ip), fa_ltr(ports)),
+                                    size="13sp", size_hint_x=0.65))
+            row.add_widget(mk_button("افزودن",
+                                     lambda _b, d=dev: pick(d),
+                                     bg=(0.25, 0.55, 0.35, 1),
+                                     size_hint_x=0.35))
+            results.add_widget(row)
+
+        def done(devs):
+            scanner["t"] = None
+            scan_btn.text = fa("اسکن شبکه")
+            n = len(devs or [])
+            status.text = fa("%d دستگاه یافت شد." % n if n
+                             else "دستگاهی یافت نشد.")
+
+        def pick(dev):
+            ip = dev["ip"]
+            close()
+            on_pick(ip)
+
+        scan_btn.bind(on_press=toggle)
+        popup.bind(on_dismiss=lambda *_: (
+            scanner["t"].stop() if scanner["t"] and
+            scanner["t"].is_alive() else None))
+        popup.open()
+
     def cam_form(self, cam, prefill=None):
         is_new = cam is None
         prefill = prefill or {}
         box = BoxLayout(orientation="vertical", spacing=dp(8),
                         padding=dp(12))
+
+        # دکمه‌ی اسکن شبکه — IP پیدا شده را در فرم پر می‌کند
+        def _pick_ip(ip):
+            ip_in.text = ip
+            if not name_in.text.strip():
+                name_in.text = ip
+
+        box.add_widget(mk_button("📡 اسکن شبکه",
+                                 lambda *_: self.open_scan(_pick_ip),
+                                 bg=(0.25, 0.30, 0.38, 1),
+                                 size_hint_y=None, height=dp(48)))
 
         # انتخاب نوع: دوربین / NVR (مثل دکمه‌های ویندوز)
         type_box = BoxLayout(orientation="horizontal", size_hint_y=None,
