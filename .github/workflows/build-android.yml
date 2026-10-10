@@ -67,13 +67,15 @@ jobs:
         run: |
           # ffpyplayer 4.5.1 به libavcodec/avfft.h نیاز دارد که در FFmpeg 8 حذف شده.
           # این کد مرده است (هیچ‌جا استفاده نمی‌شود) — مستقیم از رسیپی حذفش می‌کنیم.
-          P4A_BASE="$(python3 -c "import pythonforandroid, os; print(os.path.dirname(os.path.dirname(pythonforandroid.__file__)))" 2>/dev/null)"
-          P4A_RECIPE="$P4A_BASE/pythonforandroid/recipes/ffpyplayer/__init__.py"
+          # p4a در کش buildozer است (از بیلدهای قبلی کلون شده)
+          P4A_RECIPE=".buildozer/android/platform/python-for-android/pythonforandroid/recipes/ffpyplayer/__init__.py"
           if [ -f "$P4A_RECIPE" ]; then
             cp p4a_recipes/ffpyplayer/__init__.py "$P4A_RECIPE"
-            echo "ffpyplayer recipe patched at $P4A_RECIPE"
+            echo "ffpyplayer recipe patched"
           else
-            echo "WARNING: ffpyplayer recipe not found (base=$P4A_BASE)"
+            echo "WARNING: p4a not in cache yet, will patch after clone"
+            # اگر کش نبود، بعد از کلون p4a توسط buildozer پچ می‌کنیم
+            # (این مرحله بعد از Restore cache اجرا می‌شود)
           fi
 
       - name: Prepare p4a venv (pip pin)
