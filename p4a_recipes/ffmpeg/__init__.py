@@ -100,8 +100,8 @@ class FFMpegRecipe(Recipe):
             else:
                 # Enable codecs only for .mp4:
                 flags += [
-                    '--enable-parser=aac,ac3,h261,h264,mpegaudio,mpeg4video,mpegvideo,vc1',
-                    '--enable-decoder=aac,h264,mpeg4,mpegvideo',
+                    '--enable-parser=aac,ac3,h261,h264,hevc,mpegaudio,mpeg4video,mpegvideo,vc1',
+                    '--enable-decoder=aac,h264,hevc,mpeg4,mpegvideo',
                     '--enable-muxer=h264,mov,mp4,mpeg2video',
                     '--enable-demuxer=aac,h264,m4v,mov,mpegvideo,vc1,rtsp',
                 ]
