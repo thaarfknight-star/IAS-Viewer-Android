@@ -1,0 +1,27 @@
+THIRD-PARTY NOTICES — IAS Viewer for Android
+============================================
+This file lists the main third-party components bundled in the
+IAS-Viewer-ANDROID APK, with their licenses and source locations.
+The application's own source code is licensed under the GNU Affero
+General Public License v3.0 (see the LICENSE file in the repo root).
+
+Component                      Version    License            Source
+-----------------------------  ---------  -----------------  ----------------------------------------
+Python (python3)               3.14       PSF License 2      https://www.python.org/
+Kivy                           2.3.1      MIT                https://github.com/kivy/kivy
+OpenCV (opencv recipe)         4.x        Apache-2.0         https://github.com/opencv/opencv
+NumPy                          2.x        BSD-3-Clause       https://github.com/numpy/numpy
+Pillow                         12.x       MIT-CMU            https://github.com/python-pillow/Pillow
+arabic-reshaper                3.0.1      MIT                https://github.com/mpcabd/python-arabic-reshaper
+python-bidi                    0.6.11     LGPL               https://github.com/MeirKriheli/python-bidi
+Android NDK / SDK / build      r27 /      Apache-2.0         https://developer.android.com/
+  tools (python-for-android,
+  buildozer, Gradle, AGP)
+
+Notes:
+- Versions marked "x" track the pinned recipe/requirement versions in
+  buildozer.spec at build time; exact versions are recorded per release.
+- python-for-android and buildozer are build tools (MIT) and are not
+  bundled in the APK itself.
+- License texts: MIT/Apache-2.0/BSD at https://opensource.org/licenses/;
+  LGPL at https://www.gnu.org/licenses/lgpl-3.0.html.

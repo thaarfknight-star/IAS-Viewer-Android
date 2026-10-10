@@ -128,3 +128,20 @@ jobs:
           name: IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}
           path: dist/IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}.apk
 
+      # تعهد «Corresponding Source» لایسنس AGPL-3.0: با هر بیلد، آرشیو سورس
+      # همان کامیت + THIRD_PARTY_NOTICES هم ضمیمه می‌شود.
+      - name: Upload source archive and third-party notices
+        run: |
+          git archive --format=zip --prefix=IAS-Viewer-Android-src/ \
+            -o "dist/IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}-src.zip" HEAD
+          ls -la dist/
+        shell: bash
+
+      - name: Upload compliance bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}-compliance
+          path: |
+            dist/IAS-Viewer-ANDROID-v${{ env.APP_VERSION }}-src.zip
+            THIRD_PARTY_NOTICES
+
