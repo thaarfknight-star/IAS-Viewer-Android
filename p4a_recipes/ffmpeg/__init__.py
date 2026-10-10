@@ -44,7 +44,8 @@ class FFMpegRecipe(Recipe):
             # enable hardware acceleration codecs
             flags = [
                 '--enable-jni',
-                '--enable-mediacodec'
+                '--enable-mediacodec',
+                '--disable-vulkan',
             ]
 
             if 'openssl' in self.ctx.recipe_build_order:
