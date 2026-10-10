@@ -5,7 +5,10 @@
 """
 import os
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+try:
+    BASE = os.path.dirname(os.path.abspath(__file__))
+except Exception:
+    BASE = os.getcwd()
 FONT = os.path.join(BASE, "assets", "fonts", "Vazirmatn-Regular.ttf")
 FONT_BOLD = os.path.join(BASE, "assets", "fonts", "Vazirmatn-Bold.ttf")
 
@@ -19,3 +22,6 @@ try:
 except Exception:  # اگر کتابخانه‌ها نبودند، متن خام برگردان
     def fa(text):
         return str(text)
+
+def fa_ltr(text):
+    return str(text)
