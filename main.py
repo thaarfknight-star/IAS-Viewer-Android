@@ -112,7 +112,7 @@ def mk_button(text, on_press, bg=BRAND_BLUE, fg=C_TEXT, bold=True,
 
 
 def mk_input(hint, text="", password=False):
-    t = TextInput(hint_text=fa(hint), text=text, font_name=FONT,
+    t = TextInput(hint_text=fa(hint), text=text,
                   font_size="15sp", password=password, multiline=False,
                   size_hint_y=None, height=dp(52),
                   background_normal="", background_active="",
@@ -167,7 +167,8 @@ class LoginScreen(Screen):
 
         # لوگوی سپر
         logo = Image(source="assets/logo_shield.png",
-                     size_hint=(None, None), size=(dp(110), dp(110)),
+                     size_hint=(None, None), size=(dp(110), dp(167)),
+                     allow_stretch=True, keep_ratio=True,
                      pos_hint={"center_x": 0.5})
         root.add_widget(logo)
         root.add_widget(mk_label("ایمن آرا سورنا", size="22sp", bold=True,
@@ -960,6 +961,7 @@ class IASViewerApp(App):
     def build(self):
         Window.clearcolor = C_BG
         self.users = UserStore(os.path.join(self.user_data_dir, "users.json"))
+        self.users.ensure_defaults()
         self.cameras = CameraStore(os.path.join(self.user_data_dir, "cameras.json"))
         self.current_user = None
         self.sm = ScreenManager()
