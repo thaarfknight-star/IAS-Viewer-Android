@@ -112,7 +112,7 @@ def mk_button(text, on_press, bg=BRAND_BLUE, fg=C_TEXT, bold=True,
 
 
 def mk_input(hint, text="", password=False):
-    t = TextInput(hint_text=fa(hint), text=text,
+    t = TextInput(hint_text=fa(hint), text=text, font_name=FONT,
                   font_size="15sp", password=password, multiline=False,
                   size_hint_y=None, height=dp(52),
                   background_normal="", background_active="",
