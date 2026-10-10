@@ -19,20 +19,21 @@ FF_OPTS = {
     "out_fmt": "rgb24", # خروجی RGB
     "framedrop": True,  # حذف فریم‌های عقب‌افتاده (پخش زنده)
     "infbuf": True,
-}
-
-LIB_OPTS = {
-    # آپشن‌های تأییدشده از نسخه ویندوز (IASagent)
-    "rtsp_transport": "tcp",      # حتماً TCP - با UDP اکثر دوربین‌ها مشکل دارن
-    "stimeout": "5000000",        # تایم‌اوت سوکت: ۵ ثانیه
+    # آپشن‌های RTSP (از نسخه ویندوز - IASagent)
+    "rtsp_transport": "tcp",
+    "stimeout": "5000000",
     "max_delay": "300000",
     "buffer_size": "102400",
-    "fflags": "nobuffer",         # تأخیر کم
+    "fflags": "nobuffer",
     "flags": "low_delay",
     "reconnect": "1",
     "reconnect_streamed": "1",
     "reconnect_delay_max": "5",
     "rw_timeout": "5000000",
+}
+
+LIB_OPTS = {
+    # خالی - آپشن‌های RTSP رفتن به FF_OPTS
 }
 
 
