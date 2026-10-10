@@ -45,14 +45,15 @@ def _version():
 
 VERSION = _version()
 
-# تم تیره — هم‌خانواده با ویندوز
-C_BG = (0.05, 0.07, 0.10, 1)
-C_PANEL = (0.09, 0.11, 0.14, 1)
-C_ACCENT = (0.12, 0.44, 0.94, 1)
-C_TEXT = (0.93, 0.93, 0.95, 1)
-C_MUTED = (0.55, 0.58, 0.63, 1)
+# تم — پالت دقیق نسخه‌ی ویندوز (از IASagent)
+C_BG = (0.106, 0.133, 0.153, 1)      # #1b2227 پس‌زمینه‌ی اصلی
+C_PANEL = (0.141, 0.180, 0.204, 1)   # #242e34 پنل‌ها
+C_INPUT = (0.125, 0.157, 0.180, 1)   # #20282e ورودی/لیست
+C_ACCENT = (0.059, 0.486, 0.757, 1)  # #0f7cc1 آبی تاکیدی
+C_TEXT = (0.914, 0.933, 0.945, 1)    # #e9eef1 متن اصلی
+C_MUTED = (0.608, 0.592, 0.549, 1)   # #9b978c متن کم‌رنگ
 C_OK = (0.25, 0.75, 0.40, 1)
-C_ERR = (0.95, 0.35, 0.35, 1)
+C_ERR = (0.906, 0.298, 0.235, 1)     # #e74c3c خطر
 
 # مسیرهای رایج استریم دوربین تکی
 CANDIDATE_PATHS = [
@@ -112,7 +113,7 @@ def mk_input(hint="", password=False, multiline=False, text=""):
     t = TextInput(hint_text=fa(hint), text=text, font_name=FONT,
                   font_size="15sp", password=password, multiline=multiline,
                   size_hint_y=None, height=dp(48),
-                  background_color=(0.13, 0.15, 0.19, 1),
+                  background_color=C_INPUT,
                   foreground_color=C_TEXT, hint_text_color=C_MUTED)
     return t
 
