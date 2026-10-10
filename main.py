@@ -959,8 +959,8 @@ class SettingsScreen(Screen):
 class IASViewerApp(App):
     def build(self):
         Window.clearcolor = C_BG
-        self.users = UserStore()
-        self.cameras = CameraStore()
+        self.users = UserStore(os.path.join(self.user_data_dir, "users.json"))
+        self.cameras = CameraStore(os.path.join(self.user_data_dir, "cameras.json"))
         self.current_user = None
         self.sm = ScreenManager()
         self.sm.add_widget(LoginScreen(name="login"))
