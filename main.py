@@ -112,16 +112,26 @@ def mk_button(text, on_press, bg=BRAND_BLUE, fg=C_TEXT, bold=True,
 
 
 def mk_input(hint, text="", password=False):
-    t = TextInput(hint_text=fa(hint), text=text, font_name=FONT,
+    # بدون hint_text فارسی (مشکل فونت) - فقط متن لاتین
+    t = TextInput(text=text,
                   font_size="15sp", password=password, multiline=False,
                   size_hint_y=None, height=dp(52),
                   background_normal="", background_active="",
                   background_color=C_SURFACE,
-                  foreground_color=C_TEXT, hint_text_color=C_MUTED,
+                  foreground_color=C_TEXT,
                   cursor_color=BRAND_BLUE_LT)
     rounded_bg(t, C_SURFACE, RADIUS_SM)
     t.padding = [dp(14), dp(14), dp(14), dp(14)]
     return t
+
+
+def mk_labeled_input(hint, text="", password=False):
+    """لیبل فارسی + اینپوت (برای دور زدن مشکل فونت hint)"""
+    box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(80),
+                    spacing=dp(4))
+    box.add_widget(mk_label(hint, size="13sp", color=C_MUTED, height=dp(24)))
+    box.add_widget(mk_input("", text=text, password=password))
+    return box
 
 
 def mk_card():
@@ -178,8 +188,8 @@ class LoginScreen(Screen):
 
         root.add_widget(Widget(size_hint_y=0.06))
 
-        self.user_in = mk_input("نام کاربری")
-        self.pass_in = mk_input("رمز عبور", password=True)
+        self.user_in = mk_input("Username")
+        self.pass_in = mk_input("Password", password=True)
         self.msg = mk_label("", size="13sp", color=C_ERR, height=26)
         root.add_widget(self.user_in)
         root.add_widget(self.pass_in)
@@ -355,7 +365,7 @@ class MainScreenAddMixin:
         rounded_bg(box, C_BG, RADIUS)
         box.add_widget(mk_label("اسکن شبکه", size="18sp", bold=True,
                                height=32))
-        range_in = mk_input("رنج IP (مثلاً 192.168.1)", text="192.168.1")
+        range_in = mk_input("IP Range", text="192.168.1")
         box.add_widget(range_in)
         scan_btn = mk_button("شروع اسکن", lambda *_: None, height=50)
         box.add_widget(scan_btn)
@@ -625,12 +635,12 @@ def _cam_form(self, cam, prefill=None):
             auto_box.opacity = 1 if not is_nvr else 0.4
             path_in.disabled = True if is_nvr else not auto_chk.active
 
-        name_in = mk_input("نام (مثلاً: ورودی اصلی)")
-        ip_in = mk_input("آدرس IP")
-        port_in = mk_input("پورت", text="554")
-        user_in = mk_input("نام کاربری", text="admin")
-        pass_in = mk_input("رمز عبور", password=True)
-        chan_in = mk_input("شماره‌ی کانال (مثلاً 1)", text="1")
+        name_in = mk_input("Name")
+        ip_in = mk_input("IP Address")
+        port_in = mk_input("Port", text="554")
+        user_in = mk_input("Username", text="admin")
+        pass_in = mk_input("Password", password=True)
+        chan_in = mk_input("Channel", text="1")
         chan_in.disabled = True
         chan_in.opacity = 0
         chan_in.height = 0
@@ -643,7 +653,7 @@ def _cam_form(self, cam, prefill=None):
         auto_box.add_widget(auto_chk)
         auto_box.add_widget(mk_label("تشخیص خودکار مسیر استریم",
                                      size="14sp", halign="right"))
-        path_in = mk_input("مسیر دستی (مثلاً live/ch0)")
+        path_in = mk_input("Stream Path")
         path_in.disabled = True
         auto_chk.bind(active=lambda _i, v: setattr(path_in, "disabled", v))
 
@@ -892,8 +902,8 @@ class SettingsScreen(Screen):
         u = (app.current_user or {}).get("username", "")
         card.add_widget(mk_label("کاربر: %s" % fa_ltr(u), size="13sp",
                                  color=C_MUTED, halign="right", height=24))
-        self.old_in = mk_input("رمز فعلی", password=True)
-        self.new_in = mk_input("رمز جدید", password=True)
+        self.old_in = mk_input("Current Password", password=True)
+        self.new_in = mk_input("New Password", password=True)
         self.pw_msg = mk_label("", size="13sp", color=C_ERR, height=26)
         card.add_widget(self.old_in)
         card.add_widget(self.new_in)
