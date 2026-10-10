@@ -1,22 +1,27 @@
 # -*- coding: utf-8 -*-
 """IAS Viewer — نسخه‌ی اندروید (Kivy).
 
-نسخه‌ی مینیمال: فقط «صفحه‌ی اصلی» (پخش زنده‌ی دوربین‌ها) و «تنظیمات»
-(مدیریت دوربین‌ها + تغییر رمز). ورود با همان کاربران نسخه‌ی دسکتاپ.
+طراحی هم‌خانواده با نسخه‌ی ویندوز (IAS-CMS):
+- صفحه‌ی اصلی: گرید پخش زنده + دراور کناری (دکمه‌ی ☰) شامل
+  «اطلاعات ورود»، «اسکن شبکه» و «دوربین‌های من» — دقیقاً مثل سایدبار ویندوز.
+- افزودن دوربین به سبک ویندوز: IP/پورت/یوزر/پس + تشخیص خودکار مسیر استریم.
+- تنظیمات: تغییر رمز + درباره‌ی برنامه (لایسنس AGPL-3.0) + نسخه.
 """
 import os
+import threading
 
 import kivy
 kivy.require("2.0.0")
 
+from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.graphics import Color, Line, RoundedRectangle
 from kivy.graphics.texture import Texture
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
@@ -27,7 +32,8 @@ from kivy.uix.textinput import TextInput
 
 from ptext import fa, FONT, FONT_BOLD
 from user_store import UserStore
-from camera_store import CameraStore
+from camera_store import CameraStore, camera_url, build_rtsp_url
+from network_scan import NetworkScanner, COMMON_CCTV_PORTS
 from stream_worker import StreamWorker
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -51,140 +57,94 @@ C_TEXT = (0.93, 0.93, 0.95, 1)
 C_MUTED = (0.62, 0.65, 0.70, 1)
 C_OK = (0.25, 0.75, 0.40, 1)
 C_ERR = (0.95, 0.35, 0.35, 1)
-# پالت تایل ویندوز (CameraSlotWidget در نسخه‌ی دسکتاپ)
-C_TILE = (0.149, 0.149, 0.149, 1)          # #262626
-C_TILE_BORDER = (0.227, 0.227, 0.227, 1)   # #3a3a3a
-C_VIDEO_BG = (0.118, 0.118, 0.118, 1)      # #1e1e1e
-C_SELECT = (0.204, 0.596, 0.859, 1)        # #3498db (بوردر تایل انتخاب‌شده)
-C_NAME = (0.867, 0.867, 0.867, 1)          # #dddddd
+
+# مسیرهای رایج استریم (زیرمجموعه‌ی CANDIDATE_PATHS ویندوز — پرتکرارترین‌ها)
+CANDIDATE_PATHS = [
+    "live/ch0",
+    "cam/realmonitor?channel=1&subtype=0",
+    "Streaming/Channels/101",
+    "h264/ch1/main/av_stream",
+    "live/main",
+    "onvif1",
+]
 
 
 def mk_label(text, bold=False, size="15sp", color=C_TEXT, halign="right",
              height=None):
     lbl = Label(text=fa(text), font_name=FONT_BOLD if bold else FONT,
                 font_size=size, color=color, halign=halign, valign="middle")
-    # بدون text_size، halign/valign اثری ندارد
     lbl.bind(size=lbl.setter("text_size"))
     if height is not None:
-        # در باکس‌های اسکرول‌شونده، لیبل بدون ارتفاع مشخص روی هم می‌خوابد
         lbl.size_hint_y = None
         lbl.height = height
     return lbl
 
 
 def fa_ltr(text):
-    """متن لاتین/عددی داخل متن فارسی: با LRE/PDF از به‌هم‌ریختگی bidi
-    جلوگیری می‌کند (مثلاً '2.0.80-beta' که 'beta-2.0.80' نمایش داده می‌شد)."""
+    """متن لاتین/عددی داخل متن فارسی: جلوگیری از به‌هم‌ریختگی bidi."""
     return "\u202A%s\u202C" % text
 
 
-def mk_button(text, on_press, bg=C_ACCENT, size_hint_y=None, height=None):
+def mk_button(text, on_press, bg=C_ACCENT, size_hint_y=None, height=None,
+              size_hint_x=None):
     b = Button(text=fa(text), font_name=FONT, font_size="15sp",
                background_color=bg, color=(1, 1, 1, 1))
     if size_hint_y is not None:
         b.size_hint_y = size_hint_y
     if height is not None:
         b.height = height
+    if size_hint_x is not None:
+        b.size_hint_x = size_hint_x
     b.bind(on_press=on_press)
     return b
 
 
-def mk_input(hint="", password=False, multiline=False):
-    t = TextInput(hint_text=fa(hint), font_name=FONT, font_size="15sp",
-                  password=password, multiline=multiline,
+def mk_input(hint="", password=False, multiline=False, text=""):
+    t = TextInput(hint_text=fa(hint), text=text, font_name=FONT,
+                  font_size="15sp", password=password, multiline=multiline,
                   size_hint_y=None, height=dp(48),
                   background_color=(0.22, 0.24, 0.29, 1),
                   foreground_color=C_TEXT, hint_text_color=C_MUTED)
     return t
 
 
+def group_title(text):
+    """تیتر گروه‌های دراور — معادل QGroupBox ویندوز."""
+    return mk_label(text, bold=True, size="16sp", height=dp(34))
+
+
 # ----------------------------------------------------------------------------
 class CameraTile(BoxLayout):
-    """یک کاشی دوربین عین نسخه‌ی ویندوز: قاب #262626 با بوردر گرد، هدر
-    (نام بولد + دکمه‌ی 🔊 صدا مثل ویندوز)، ناحیه‌ی ویدیوی #1e1e1e با گوشه‌ی
-    گرد، و خط وضعیت پایین. تک‌لمس = انتخاب (بوردر آبی #3498db مثل ویندوز)،
-    دابل‌تپ = تمام‌صفحه (معادل دابل‌کلیک ویندوز)."""
+    """یک کاشی دوربین: نام + وضعیت + تصویر زنده. لمس → تمام‌صفحه."""
 
     def __init__(self, cam, **kwargs):
         super().__init__(**kwargs)
         self.orientation = "vertical"
         self.cam = cam
         self.worker = None
-        self.selected = False
-        self.padding = dp(6)
+        self.padding = dp(4)
         self.spacing = dp(4)
 
-        # قاب ویندوزی
-        with self.canvas.before:
-            Color(*C_TILE)
-            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size,
-                                             radius=[dp(8)])
-            self._border_color = Color(*C_TILE_BORDER)
-            self._border_line = Line(
-                rounded_rectangle=(self.x, self.y, self.width, self.height,
-                                   dp(8)),
-                width=dp(1))
-        self.bind(pos=self._redraw_tile, size=self._redraw_tile)
+        top = BoxLayout(orientation="horizontal", size_hint_y=None,
+                        height=dp(30))
+        self.name_lbl = mk_label(cam.get("name") or "?", bold=True,
+                                 size="14sp", halign="right")
+        self.status_lbl = mk_label("…", size="12sp", color=C_MUTED,
+                                   halign="left")
+        top.add_widget(self.name_lbl)
+        top.add_widget(self.status_lbl)
+        self.add_widget(top)
 
-        # هدر: نام + دکمه‌ی صدا
-        header = BoxLayout(orientation="horizontal", size_hint_y=None,
-                           height=dp(34), spacing=dp(4))
-        self.name_lbl = mk_label(cam.get("name") or "؟", bold=True,
-                                 size="13sp", color=C_NAME, halign="right")
-        self.audio_btn = Button(text="\U0001F50A", font_size="16sp",
-                                size_hint=(None, None), size=(dp(36), dp(34)),
-                                background_color=(0, 0, 0, 0), color=C_TEXT)
-        self.audio_btn.bind(on_press=self._on_audio)
-        header.add_widget(self.name_lbl)
-        header.add_widget(self.audio_btn)
-        self.add_widget(header)
-
-        # ناحیه‌ی ویدیو: #1e1e1e با گوشه‌ی گرد
-        vbox = BoxLayout(padding=dp(2))
-        with vbox.canvas.before:
-            Color(*C_VIDEO_BG)
-            self._video_rect = RoundedRectangle(pos=vbox.pos, size=vbox.size,
-                                               radius=[dp(6)])
-        vbox.bind(pos=self._redraw_video, size=self._redraw_video)
         self.img = Image(allow_stretch=True, keep_ratio=True)
-        vbox.add_widget(self.img)
-        self.add_widget(vbox)
+        self.add_widget(self.img)
 
-        # خط وضعیت پایین (مثل ویندوز)
-        self.status_lbl = mk_label("…", size="11sp", color=C_MUTED,
-                                   halign="right", height=dp(20))
-        self.add_widget(self.status_lbl)
-
-    # ------------------------------------------------------------ رسم --
-    def _redraw_tile(self, *args):
-        self._bg_rect.pos = self.pos
-        self._bg_rect.size = self.size
-        self._border_line.rounded_rectangle = (
-            self.x, self.y, self.width, self.height, dp(8))
-
-    def _redraw_video(self, inst, val):
-        self._video_rect.pos = inst.pos
-        self._video_rect.size = inst.size
-
-    def set_selected(self, sel):
-        self.selected = sel
-        if sel:
-            self._border_color.rgba = C_SELECT
-            self._border_line.width = dp(2)
-        else:
-            self._border_color.rgba = C_TILE_BORDER
-            self._border_line.width = dp(1)
-
-    def _on_audio(self, *_):
-        app = App.get_running_app()
-        if app:
-            app.toast("پخش صدا به‌زودی فعال می‌شود")
-
-    # ------------------------------------------------------------- استریم --
     def start(self):
         self.stop()
-        self.worker = StreamWorker(self.cam["url"], self._on_frame,
-                                   self._on_state)
+        url = camera_url(self.cam)
+        if not url:
+            self._on_state("error")
+            return
+        self.worker = StreamWorker(url, self._on_frame, self._on_state)
         self.worker.start()
 
     def stop(self):
@@ -220,7 +180,7 @@ class CameraTile(BoxLayout):
     def _show_state(self, state):
         mapping = {
             "connecting": ("در حال اتصال…", C_MUTED),
-            "live": ("متصل - پخش زنده", C_OK),
+            "live": ("● زنده", C_OK),
             "error": ("قطع — تلاش مجدد…", C_ERR),
         }
         txt, col = mapping.get(state, ("…", C_MUTED))
@@ -228,31 +188,24 @@ class CameraTile(BoxLayout):
         self.status_lbl.color = col
 
     def on_touch_down(self, touch):
-        # اول بچه‌ها (دکمه‌ی 🔊) فرصت بگیرند
-        if super().on_touch_down(touch):
-            return True
         if self.collide_point(*touch.pos):
             app = App.get_running_app()
-            main = app.root.get_screen("main") if app else None
-            if main is not None:
-                if touch.is_double_tap:
-                    main.open_viewer(self)
-                else:
-                    main.select_tile(self)
+            if app:
+                app.root.get_screen("main").open_viewer(self)
             return True
-        return False
+        return super().on_touch_down(touch)
 
 
+# ----------------------------------------------------------------------------
 class LoginScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = "login"
         root = BoxLayout(orientation="vertical", padding=dp(24),
                          spacing=dp(12))
-        root.add_widget(BoxLayout(size_hint_y=0.15))  # فاصله‌ی بالا
-        title = mk_label("IAS Viewer", bold=True, size="28sp",
-                         halign="center")
-        root.add_widget(title)
+        root.add_widget(BoxLayout(size_hint_y=0.15))
+        root.add_widget(mk_label("IAS Viewer", bold=True, size="28sp",
+                                 halign="center"))
         root.add_widget(mk_label("ورود به برنامه", size="16sp",
                                  color=C_MUTED, halign="center"))
         self.username = mk_input("نام کاربری")
@@ -290,36 +243,44 @@ class LoginScreen(Screen):
         app.root.current = "main"
 
 
+# ----------------------------------------------------------------------------
 class MainScreen(Screen):
-    """صفحه‌ی اصلی: گرید پخش زنده‌ی دوربین‌ها."""
+    """صفحه‌ی اصلی: گرید پخش زنده + دراور کناری به سبک سایدبار ویندوز."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.name = "main"
         self.tiles = []
         self.viewer_tile = None
+        self.scanner = None
+        self.drawer_open = False
 
-        root = BoxLayout(orientation="vertical")
-        # هدر
+        root = FloatLayout()
+
+        # ---- بدنه‌ی اصلی ----
+        self.main_box = BoxLayout(orientation="vertical")
         header = BoxLayout(orientation="horizontal", size_hint_y=None,
                            height=dp(52), padding=dp(6), spacing=dp(6))
         self.user_lbl = mk_label("", size="13sp", color=C_MUTED,
                                  halign="left")
         btn_settings = mk_button("⚙ تنظیمات", self.goto_settings,
-                                 bg=(0.25, 0.30, 0.38, 1))
-        btn_settings.size_hint_x = 0.35
+                                 bg=(0.25, 0.30, 0.38, 1),
+                                 size_hint_x=0.35)
         btn_logout = mk_button("خروج", self.do_logout,
-                               bg=(0.45, 0.25, 0.25, 1))
-        btn_logout.size_hint_x = 0.25
+                               bg=(0.45, 0.25, 0.25, 1),
+                               size_hint_x=0.25)
         title = mk_label("IAS Viewer", bold=True, size="17sp")
         title.size_hint_x = 0.9
+        btn_drawer = mk_button("☰", self.toggle_drawer,
+                               bg=(0.25, 0.30, 0.38, 1),
+                               size_hint_x=0.18)
         header.add_widget(self.user_lbl)
         header.add_widget(btn_settings)
         header.add_widget(btn_logout)
         header.add_widget(title)
-        root.add_widget(header)
+        header.add_widget(btn_drawer)
+        self.main_box.add_widget(header)
 
-        # بدنه: گرید دوربین‌ها
         self.body = BoxLayout(orientation="vertical")
         self.scroll = ScrollView()
         self.grid = GridLayout(cols=2, spacing=dp(8), padding=dp(8),
@@ -330,11 +291,10 @@ class MainScreen(Screen):
         self.scroll.add_widget(self.grid)
         self.body.add_widget(self.scroll)
         self.empty_lbl = mk_label(
-            "هنوز دوربینی تعریف نشده است.\nاز «تنظیمات» دوربین اضافه کنید.",
+            "هنوز دوربینی تعریف نشده است.\nاز منوی ☰ دوربین اضافه کنید.",
             size="15sp", color=C_MUTED, halign="center")
-        root.add_widget(self.body)
+        self.main_box.add_widget(self.body)
 
-        # نمای تمام‌صفحه (در ابتدا مخفی)
         self.viewer = BoxLayout(orientation="vertical", size_hint_y=None,
                                 height=0, opacity=0, disabled=True)
         vheader = BoxLayout(orientation="horizontal", size_hint_y=None,
@@ -342,24 +302,139 @@ class MainScreen(Screen):
         vheader.add_widget(mk_button("◀ بازگشت", self.close_viewer,
                                      bg=(0.25, 0.30, 0.38, 1)))
         vheader.add_widget(mk_label("پخش زنده", bold=True, size="16sp"))
-        audio_v = Button(text="\U0001F50A", font_size="16sp",
-                         size_hint=(None, None), size=(dp(44), dp(44)),
-                         background_color=(0, 0, 0, 0), color=C_TEXT)
-        audio_v.bind(on_press=lambda *_: App.get_running_app().toast(
-            "پخش صدا به‌زودی فعال می‌شود"))
-        vheader.add_widget(audio_v)
         self.viewer.add_widget(vheader)
         self.viewer_slot = BoxLayout(orientation="vertical")
         self.viewer.add_widget(self.viewer_slot)
-        root.add_widget(self.viewer)
+        self.main_box.add_widget(self.viewer)
+        root.add_widget(self.main_box)
 
+        # ---- اسکریم (بستن دراور با لمس بیرون) ----
+        self.scrim = Button(size_hint=(1, 1), background_color=(0, 0, 0, 0),
+                            opacity=0, disabled=True)
+        self.scrim.bind(on_press=lambda *_: self.close_drawer())
+        root.add_widget(self.scrim)
+
+        # ---- دراور (سایدبار ویندوز) ----
+        self.drawer_width = min(dp(340), int(Window.width * 0.88))
+        self.drawer = BoxLayout(orientation="vertical", size_hint=(None, 1),
+                                width=self.drawer_width,
+                                x=Window.width, y=0)
+        with self.drawer.canvas.before:
+            from kivy.graphics import Color, Rectangle
+            Color(*C_PANEL)
+            self._drawer_bg = Rectangle(pos=self.drawer.pos,
+                                        size=self.drawer.size)
+        self.drawer.bind(pos=self._sync_drawer_bg, size=self._sync_drawer_bg)
+        self._build_drawer_content()
+        root.add_widget(self.drawer)
+
+        Window.bind(size=self._on_window_resize)
         self.add_widget(root)
 
-    # -------------------------------------------------------------- چرخه --
+    def _sync_drawer_bg(self, *_):
+        self._drawer_bg.pos = self.drawer.pos
+        self._drawer_bg.size = self.drawer.size
+
+    def _on_window_resize(self, *_):
+        self.drawer_width = min(dp(340), int(Window.width * 0.88))
+        self.drawer.width = self.drawer_width
+        if not self.drawer_open:
+            self.drawer.x = Window.width
+        else:
+            self.drawer.x = Window.width - self.drawer_width
+
+    # ------------------------------------------------------------ دراور --
+    def _build_drawer_content(self):
+        d = self.drawer
+        # سربرگ دراور
+        dhead = BoxLayout(orientation="horizontal", size_hint_y=None,
+                          height=dp(52), padding=dp(8), spacing=dp(6))
+        dhead.add_widget(mk_label("منوی دوربین‌ها", bold=True, size="16sp"))
+        dhead.add_widget(mk_button("✕", lambda *_: self.close_drawer(),
+                                   bg=(0.45, 0.25, 0.25, 1),
+                                   size_hint_x=0.25))
+        d.add_widget(dhead)
+
+        scroll = ScrollView()
+        content = BoxLayout(orientation="vertical", spacing=dp(10),
+                            padding=dp(12), size_hint_y=None)
+        content.bind(minimum_height=content.setter("height"))
+
+        # --- اطلاعات ورود (مثل ویندوز: فقط در حافظه) ---
+        content.add_widget(group_title("🔑 اطلاعات ورود به دوربین‌ها"))
+        self.scan_user = mk_input("نام کاربری", text="admin")
+        self.scan_pass = mk_input("رمز عبور", password=True)
+        content.add_widget(self.scan_user)
+        content.add_widget(self.scan_pass)
+        content.add_widget(mk_label("فقط در حافظه نگه‌داشته می‌شود.",
+                                    size="12sp", color=C_MUTED,
+                                    height=dp(24)))
+
+        # --- اسکن شبکه (مثل ویندوز) ---
+        content.add_widget(group_title("📡 اسکن شبکه"))
+        self.scan_range = mk_input("رنج IP (مثلاً 192.168.1)",
+                                   text="192.168.1")
+        content.add_widget(self.scan_range)
+        self.scan_btn = mk_button("اسکن شبکه", self.toggle_scan,
+                                  size_hint_y=None, height=dp(48))
+        content.add_widget(self.scan_btn)
+        self.scan_status = mk_label("", size="12sp", color=C_MUTED,
+                                    halign="center", height=dp(28))
+        content.add_widget(self.scan_status)
+        self.scan_results = BoxLayout(orientation="vertical",
+                                      spacing=dp(6), size_hint_y=None)
+        self.scan_results.bind(
+            minimum_height=self.scan_results.setter("height"))
+        content.add_widget(self.scan_results)
+
+        # --- دوربین‌های من (مثل «دوربین‌ها و NVRهای من» ویندوز) ---
+        content.add_widget(group_title("🎥 دوربین‌های من"))
+        content.add_widget(mk_button("＋ افزودن دوربین",
+                                     lambda *_: self.cam_form(None),
+                                     size_hint_y=None, height=dp(48)))
+        self.cam_list = BoxLayout(orientation="vertical", spacing=dp(6),
+                                  size_hint_y=None)
+        self.cam_list.bind(minimum_height=self.cam_list.setter("height"))
+        content.add_widget(self.cam_list)
+        content.add_widget(mk_label(
+            "برای پخش زنده روی تصویر دوربین بزنید.",
+            size="12sp", color=C_MUTED, halign="center", height=dp(28)))
+
+        scroll.add_widget(content)
+        d.add_widget(scroll)
+
+    def toggle_drawer(self, *_):
+        if self.drawer_open:
+            self.close_drawer()
+        else:
+            self.open_drawer()
+
+    def open_drawer(self):
+        self.drawer_open = True
+        self.refresh_cam_list()
+        self.scrim.disabled = False
+        self.scrim.opacity = 1
+        # اسکریم نامرئی ولی لمسی
+        self.scrim.background_color = (0, 0, 0, 0.001)
+        Animation(x=Window.width - self.drawer_width,
+                  duration=0.22, t="out_quad").start(self.drawer)
+
+    def close_drawer(self):
+        if not self.drawer_open:
+            return
+        self.drawer_open = False
+        self.scrim.disabled = True
+        self.scrim.opacity = 0
+        Animation(x=Window.width, duration=0.2, t="in_quad").start(
+            self.drawer)
+
+    # ------------------------------------------------------- چرخه‌ی صفحه --
     def on_enter(self):
         self.rebuild_grid()
 
     def on_leave(self):
+        self.close_drawer()
+        self.stop_scan()
         self.close_viewer(silent=True)
         self.stop_all()
 
@@ -384,7 +459,6 @@ class MainScreen(Screen):
 
     # -------------------------------------------------------------- گرید --
     def _adapt_grid(self, *_):
-        # عمودی: ۲ ستون، افقی: ۳ ستون — در هر دو جهت قابل استفاده
         self.grid.cols = 2 if Window.height > Window.width else 3
 
     def stop_all(self):
@@ -410,14 +484,6 @@ class MainScreen(Screen):
             self.grid.add_widget(tile)
             tile.start()
 
-    def select_tile(self, tile):
-        # مثل ویندوز: تک‌کلیک فقط انتخاب می‌کند (بوردر آبی)
-        for t in self.tiles:
-            if t is not tile and t.selected:
-                t.set_selected(False)
-        if not tile.selected:
-            tile.set_selected(True)
-
     # -------------------------------------------------------- تمام‌صفحه --
     def open_viewer(self, tile):
         if self.viewer_tile is not None:
@@ -442,7 +508,6 @@ class MainScreen(Screen):
         self.viewer_slot.remove_widget(tile)
         tile.size_hint_y = None
         tile.height = dp(220)
-        # برگرداندن به گرید (مرتب‌سازی بر اساس ترتیب اولیه)
         self.grid.clear_widgets()
         for t in self.tiles:
             self.grid.add_widget(t)
@@ -454,9 +519,273 @@ class MainScreen(Screen):
         self.viewer.opacity = 0
         self.viewer.disabled = True
 
+    # ------------------------------------------------------- اسکن شبکه --
+    def toggle_scan(self, *_):
+        if self.scanner and self.scanner.is_alive():
+            self.stop_scan()
+            return
+        self.scan_results.clear_widgets()
+        self.scan_btn.text = fa("توقف اسکن")
+        self.scan_btn.background_color = (0.65, 0.28, 0.28, 1)
+        self.scan_status.text = fa("در حال اسکن…")
+        self.scanner = NetworkScanner(
+            self.scan_range.text,
+            on_found=lambda dev: Clock.schedule_once(
+                lambda dt: self._add_scan_row(dev)),
+            on_done=lambda devs: Clock.schedule_once(
+                lambda dt: self._scan_done(devs)),
+        )
+        self.scanner.start()
+
+    def stop_scan(self):
+        s, self.scanner = self.scanner, None
+        if s and s.is_alive():
+            s.stop()
+        try:
+            self.scan_btn.text = fa("اسکن شبکه")
+            self.scan_btn.background_color = C_ACCENT
+        except Exception:
+            pass
+
+    def _scan_done(self, devs):
+        self.stop_scan()
+        n = len(devs or [])
+        self.scan_status.text = fa(
+            "%d دستگاه یافت شد." % n if n else "دستگاهی یافت نشد.")
+
+    def _add_scan_row(self, dev):
+        ip = dev["ip"]
+        ports = ", ".join(str(p) for p in dev["ports"])
+        row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                        height=dp(48), spacing=dp(6))
+        info = mk_label("%s\n%s" % (fa_ltr(ip), fa_ltr(ports)),
+                        size="13sp", halign="right")
+        info.size_hint_x = 0.65
+        row.add_widget(info)
+        row.add_widget(mk_button("افزودن",
+                                 lambda _b, d=dev: self._scan_add(d),
+                                 bg=(0.25, 0.55, 0.35, 1),
+                                 size_hint_x=0.35))
+        self.scan_results.add_widget(row)
+
+    def _scan_add(self, dev):
+        # باز کردن دیالوگ افزودن با IP و یوزر/پس از پیش پرشده (مثل ویندوز)
+        self.cam_form(None, prefill_ip=dev["ip"],
+                      prefill_user=self.scan_user.text.strip(),
+                      prefill_pass=self.scan_pass.text)
+
+    # ------------------------------------------------- لیست دوربین‌ها --
+    def refresh_cam_list(self):
+        self.cam_list.clear_widgets()
+        app = App.get_running_app()
+        for cam in app.cameras.cameras:
+            row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                            height=dp(52), spacing=dp(6))
+            name_lbl = mk_label("%s" % (cam.get("name") or "؟"),
+                                size="14sp", bold=True)
+            name_lbl.size_hint_x = 0.5
+            row.add_widget(name_lbl)
+            row.add_widget(mk_button("ویرایش",
+                                     lambda _b, c=cam: self.cam_form(c),
+                                     bg=(0.25, 0.30, 0.38, 1),
+                                     size_hint_x=0.25))
+            row.add_widget(mk_button("حذف",
+                                     lambda _b, c=cam: self.cam_delete(c),
+                                     bg=(0.55, 0.25, 0.25, 1),
+                                     size_hint_x=0.25))
+            self.cam_list.add_widget(row)
+
+    # ------------------------------------------- دیالوگ افزودن/ویرایش --
+    def cam_form(self, cam, prefill_ip="", prefill_user="", prefill_pass=""):
+        is_new = cam is None
+        box = BoxLayout(orientation="vertical", spacing=dp(8),
+                        padding=dp(12))
+        # مثل دیالوگ ویندوز: نام، IP، پورت، یوزر، پس، تشخیص خودکار، مسیر دستی
+        name_in = mk_input("نام دوربین (مثلاً: ورودی اصلی)")
+        ip_in = mk_input("آدرس IP دوربین")
+        port_in = mk_input("پورت", text="554")
+        user_in = mk_input("نام کاربری", text="admin")
+        pass_in = mk_input("رمز عبور", password=True)
+        if not is_new:
+            name_in.text = cam.get("name", "")
+            ip_in.text = cam.get("ip", "")
+            port_in.text = str(cam.get("port", "554") or "554")
+            user_in.text = cam.get("user", "")
+            pass_in.text = cam.get("pass", "")
+        if prefill_ip:
+            ip_in.text = prefill_ip
+            if prefill_user:
+                user_in.text = prefill_user
+            if prefill_pass:
+                pass_in.text = prefill_pass
+            if not name_in.text:
+                name_in.text = prefill_ip
+
+        auto_box = BoxLayout(orientation="horizontal", size_hint_y=None,
+                             height=dp(40), spacing=dp(6))
+        from kivy.uix.checkbox import CheckBox
+        auto_chk = CheckBox(active=True, size_hint_x=None, width=dp(40))
+        auto_box.add_widget(auto_chk)
+        auto_box.add_widget(mk_label("تشخیص خودکار مسیر استریم",
+                                     size="14sp"))
+        path_in = mk_input("مسیر دستی استریم (مثلاً live/ch0)",
+                           text="" if is_new else cam.get("path", ""))
+        path_in.disabled = True
+        auto_chk.bind(active=lambda _i, v: setattr(path_in, "disabled", v))
+
+        msg = mk_label("", size="13sp", color=C_ERR, halign="center",
+                       height=dp(32))
+        for w in (name_in, ip_in, port_in, user_in, pass_in):
+            box.add_widget(w)
+        box.add_widget(auto_box)
+        box.add_widget(path_in)
+        box.add_widget(msg)
+
+        popup = Popup(title=fa("افزودن دوربین" if is_new else "ویرایش دوربین"),
+                      title_font=FONT, content=box,
+                      size_hint=(0.92, 0.88))
+        detect_thread = {"t": None, "cancel": False}
+
+        def set_busy(busy, text=""):
+            for w in (name_in, ip_in, port_in, user_in, pass_in, path_in):
+                w.disabled = busy
+            btn_save.disabled = busy
+            if text:
+                msg.text = fa(text)
+                msg.color = C_MUTED
+
+        def do_save(name, ip, port, user, pwd, path):
+            app = App.get_running_app()
+            if is_new:
+                app.cameras.add(name, ip=ip, port=port, user=user,
+                                pwd=pwd, path=path)
+            else:
+                app.cameras.update(cam["id"], name, ip=ip, port=port,
+                                   user=user, pwd=pwd, path=path)
+            popup.dismiss()
+            self.refresh_cam_list()
+            self.rebuild_grid()
+
+        def on_save(*_):
+            name = name_in.text.strip()
+            ip = ip_in.text.strip()
+            if not ip:
+                msg.text = fa("آدرس IP لازم است.")
+                msg.color = C_ERR
+                return
+            if not name:
+                name = ip
+            port = port_in.text.strip() or "554"
+            user = user_in.text.strip()
+            pwd = pass_in.text
+            if auto_chk.active:
+                # تشخیص خودکار مسیر (مثل ویندوز) در نخ جدا
+                set_busy(True, "در حال تشخیص خودکار مسیر استریم…")
+                detect_thread["cancel"] = False
+
+                def detect():
+                    found = ""
+                    try:
+                        import cv2
+                    except Exception:
+                        cv2 = None
+                    for p in CANDIDATE_PATHS:
+                        if detect_thread["cancel"]:
+                            return
+                        Clock.schedule_once(
+                            lambda dt, pp=p: set_busy(
+                                True, "در حال بررسی مسیر: %s…" % fa_ltr(pp)))
+                        url = build_rtsp_url(ip, port, user, pwd, p)
+                        ok = False
+                        if cv2 is not None:
+                            try:
+                                cap = cv2.VideoCapture()
+                                try:
+                                    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,
+                                            4000)
+                                except Exception:
+                                    pass
+                                if cap.open(url):
+                                    ok, _frm = cap.read()
+                                cap.release()
+                            except Exception:
+                                ok = False
+                        if ok:
+                            found = p
+                            break
+                    if detect_thread["cancel"]:
+                        return
+                    Clock.schedule_once(
+                        lambda dt: _detect_done(found))
+
+                def _detect_done(found):
+                    if found:
+                        msg.text = fa("مسیر پیدا شد: %s" % fa_ltr(found))
+                        msg.color = C_OK
+                        do_save(name_in.text.strip() or ip_in.text.strip(),
+                                ip, port, user, pwd, found)
+                    else:
+                        set_busy(False)
+                        msg.text = fa("مسیری پیدا نشد؛ دستی وارد کنید.")
+                        msg.color = C_ERR
+                        auto_chk.active = False
+
+                detect_thread["t"] = threading.Thread(target=detect,
+                                                      daemon=True)
+                detect_thread["t"].start()
+            else:
+                do_save(name, ip, port, user, pwd, path_in.text.strip())
+
+        def on_cancel(*_):
+            detect_thread["cancel"] = True
+            popup.dismiss()
+
+        btns = BoxLayout(orientation="horizontal", size_hint_y=None,
+                         height=dp(48), spacing=dp(8))
+        btn_save = mk_button("ذخیره", on_save)
+        btns.add_widget(mk_button("انصراف", on_cancel,
+                                  bg=(0.30, 0.32, 0.36, 1)))
+        btns.add_widget(btn_save)
+        box.add_widget(btns)
+        popup.bind(on_dismiss=lambda *_: detect_thread.update(cancel=True))
+        popup.open()
+
+    def cam_delete(self, cam):
+        box = BoxLayout(orientation="vertical", spacing=dp(10),
+                        padding=dp(12))
+        box.add_widget(mk_label("«%s» حذف شود؟" % (cam.get("name") or "؟"),
+                                halign="center", height=dp(40)))
+        btns = BoxLayout(orientation="horizontal", size_hint_y=None,
+                         height=dp(48), spacing=dp(8))
+        popup = Popup(title=fa("حذف دوربین"), title_font=FONT,
+                      content=box, size_hint=(0.9, 0.4))
+
+        def do_del(*_):
+            App.get_running_app().cameras.delete(cam["id"])
+            popup.dismiss()
+            self.refresh_cam_list()
+            self.rebuild_grid()
+
+        btns.add_widget(mk_button("انصراف", lambda *_: popup.dismiss(),
+                                  bg=(0.30, 0.32, 0.36, 1)))
+        btns.add_widget(mk_button("حذف", do_del, bg=(0.65, 0.28, 0.28, 1)))
+        box.add_widget(btns)
+        popup.open()
+
+
+# ----------------------------------------------------------------------------
+ABOUT_NOTICE_FA = """«IAS Viewer» — نسخه‌ی ANDROID
+Copyright (C) 2026 Taha Arefi (طه عارفی)
+
+این برنامه نرم‌افزار آزاد است: شما می‌توانید آن را تحت شرایط
+«GNU Affero General Public License» نسخه‌ی ۳ (یا هر نسخه‌ی جدیدتر،
+به انتخاب شما) بازتوزیع و/یا اصلاح کنید.
+متن کامل لایسنس: فایل LICENSE در ریپوی گیت‌هاب
+سورس‌کد: https://github.com/thaarfknight-star/IAS-Viewer-Android"""
+
 
 class SettingsScreen(Screen):
-    """تنظیمات: مدیریت دوربین‌ها + تغییر رمز + نسخه."""
+    """تنظیمات: تغییر رمز + درباره‌ی برنامه (لایسنس) + نسخه."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -465,7 +794,8 @@ class SettingsScreen(Screen):
         header = BoxLayout(orientation="horizontal", size_hint_y=None,
                            height=dp(52), padding=dp(6), spacing=dp(6))
         header.add_widget(mk_button("◀ بازگشت", self.go_back,
-                                    bg=(0.25, 0.30, 0.38, 1)))
+                                    bg=(0.25, 0.30, 0.38, 1),
+                                    size_hint_x=0.35))
         header.add_widget(mk_label("⚙ تنظیمات", bold=True, size="17sp"))
         root.add_widget(header)
 
@@ -489,26 +819,6 @@ class SettingsScreen(Screen):
                                          size="14sp", color=C_MUTED,
                                          height=dp(28)))
 
-        # --- دوربین‌ها ---
-        self.content.add_widget(mk_label("دوربین‌ها", bold=True,
-                                         size="17sp", height=dp(36)))
-        for cam in app.cameras.cameras:
-            row = BoxLayout(orientation="horizontal", size_hint_y=None,
-                            height=dp(48), spacing=dp(6))
-            row.add_widget(mk_label(cam.get("name") or "؟", size="14sp"))
-            b_edit = mk_button("ویرایش", lambda _b, c=cam: self.cam_form(c),
-                               bg=(0.25, 0.30, 0.38, 1))
-            b_edit.size_hint_x = 0.3
-            b_del = mk_button("حذف", lambda _b, c=cam: self.cam_delete(c),
-                              bg=(0.55, 0.25, 0.25, 1))
-            b_del.size_hint_x = 0.3
-            row.add_widget(b_edit)
-            row.add_widget(b_del)
-            self.content.add_widget(row)
-        self.content.add_widget(mk_button("＋ افزودن دوربین",
-                                          lambda *_: self.cam_form(None),
-                                          size_hint_y=None, height=dp(48)))
-
         # --- تغییر رمز ---
         self.content.add_widget(mk_label("تغییر رمز عبور", bold=True,
                                          size="17sp", height=dp(36)))
@@ -525,69 +835,20 @@ class SettingsScreen(Screen):
                                           size_hint_y=None, height=dp(48)))
         self.content.add_widget(self.pw_msg)
 
+        # --- درباره‌ی برنامه (لایسنس AGPL-3.0) ---
+        self.content.add_widget(mk_label("درباره‌ی برنامه", bold=True,
+                                         size="17sp", height=dp(36)))
+        about = mk_label(ABOUT_NOTICE_FA, size="13sp", color=C_MUTED,
+                         halign="right")
+        about.size_hint_y = None
+        about.bind(texture_size=lambda _i, v: setattr(about, "height",
+                                                      v[1] + dp(16)))
+        self.content.add_widget(about)
+
         # --- نسخه ---
         self.content.add_widget(mk_label(
             "نسخه‌ی برنامه: %s" % fa_ltr(VERSION),
             size="13sp", color=C_MUTED, halign="center", height=dp(28)))
-
-    # ------------------------------------------------------- دوربین‌ها --
-    def cam_form(self, cam):
-        is_new = cam is None
-        box = BoxLayout(orientation="vertical", spacing=dp(10),
-                        padding=dp(12))
-        name_in = mk_input("نام دوربین (مثلاً: ورودی اصلی)")
-        url_in = mk_input("آدرس استریم (مثلاً rtsp://…)")
-        if not is_new:
-            name_in.text = cam.get("name", "")
-            url_in.text = cam.get("url", "")
-        msg = mk_label("", size="13sp", color=C_ERR, halign="center")
-        box.add_widget(name_in)
-        box.add_widget(url_in)
-        box.add_widget(msg)
-        btns = BoxLayout(orientation="horizontal", size_hint_y=None,
-                         height=dp(48), spacing=dp(8))
-        popup = Popup(title=fa("افزودن دوربین" if is_new else "ویرایش دوربین"),
-                      title_font=FONT, content=box,
-                      size_hint=(0.9, 0.55))
-
-        def save(*_):
-            app = App.get_running_app()
-            if not name_in.text.strip() or not url_in.text.strip():
-                msg.text = fa("نام و آدرس هر دو لازم است.")
-                return
-            if is_new:
-                app.cameras.add(name_in.text, url_in.text)
-            else:
-                app.cameras.update(cam["id"], name_in.text, url_in.text)
-            popup.dismiss()
-            self.refresh()
-
-        btns.add_widget(mk_button("انصراف", lambda *_: popup.dismiss(),
-                                  bg=(0.30, 0.32, 0.36, 1)))
-        btns.add_widget(mk_button("ذخیره", save))
-        box.add_widget(btns)
-        popup.open()
-
-    def cam_delete(self, cam):
-        box = BoxLayout(orientation="vertical", spacing=dp(10),
-                        padding=dp(12))
-        box.add_widget(mk_label("«%s» حذف شود؟" % (cam.get("name") or "؟"),
-                                halign="center"))
-        btns = BoxLayout(orientation="horizontal", size_hint_y=None,
-                         height=dp(48), spacing=dp(8))
-        popup = Popup(title=fa("حذف دوربین"), title_font=FONT,
-                      content=box, size_hint=(0.9, 0.4))
-
-        def do_del(*_):
-            App.get_running_app().cameras.delete(cam["id"])
-            popup.dismiss()
-            self.refresh()
-
-        btns.add_widget(mk_button("انصراف", lambda *_: popup.dismiss(),
-                                  bg=(0.30, 0.32, 0.36, 1)))
-        btns.add_widget(mk_button("حذف", do_del, bg=(0.65, 0.28, 0.28, 1)))
-        box.add_widget(btns)
-        popup.open()
 
     # ------------------------------------------------------- تغییر رمز --
     def change_password(self, *_):
@@ -633,10 +894,11 @@ class IASViewerApp(App):
         box = BoxLayout(orientation="vertical", spacing=dp(10),
                         padding=dp(12))
         box.add_widget(mk_label("در اولین ورود باید رمز عبور را عوض کنید.",
-                                halign="center"))
+                                halign="center", height=dp(40)))
         new1 = mk_input("رمز جدید", password=True)
         new2 = mk_input("تکرار رمز جدید", password=True)
-        msg = mk_label("", size="13sp", color=C_ERR, halign="center")
+        msg = mk_label("", size="13sp", color=C_ERR, halign="center",
+                       height=dp(28))
         box.add_widget(new1)
         box.add_widget(new2)
         box.add_widget(msg)
@@ -669,15 +931,6 @@ class IASViewerApp(App):
         btns.add_widget(mk_button("ذخیره", save))
         box.add_widget(btns)
         popup.open()
-
-    def toast(self, msg):
-        """پیام کوتاه محو‌شونده (جایگزین Toast اندروید)."""
-        popup = Popup(title="", content=mk_label(msg, halign="center"),
-                      size_hint=(0.85, None), height=dp(64),
-                      background_color=(0.15, 0.16, 0.19, 1),
-                      separator_height=0)
-        popup.open()
-        Clock.schedule_once(lambda dt: popup.dismiss(), 1.6)
 
     def on_stop(self):
         try:

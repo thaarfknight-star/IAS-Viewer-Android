@@ -1,11 +1,44 @@
 # -*- coding: utf-8 -*-
 """لیست دوربین‌های نسخه‌ی اندروید (cameras.json).
 
-هر دوربین: id, name, url (آدرس RTSP/HTTP), enabled
+مدل ویندوزی: هر دوربین با ip/port/user/pass/path ذخیره می‌شود و آدرس
+استریم از روی آن‌ها ساخته می‌شود (مثل build_rtsp_url در نسخه‌ی ویندوز).
+رکوردهای قدیمیِ فقط-url هم همچنان کار می‌کنند.
 """
 import json
 import os
 import uuid
+from urllib.parse import quote
+
+
+def build_rtsp_url(ip, port, user, pwd, path):
+    """ساخت آدرس RTSP از اجزا — معادل build_rtsp_url نسخه‌ی ویندوز."""
+    ip = (ip or "").strip()
+    if not ip:
+        return ""
+    port = str(port or "554").strip() or "554"
+    user = (user or "").strip()
+    pwd = (pwd or "").strip()
+    path = (path or "").strip().lstrip("/")
+    auth = ""
+    if user:
+        auth = quote(user, safe="") + (":" + quote(pwd, safe="") if pwd else "") + "@"
+    url = "rtsp://%s%s:%s" % (auth, ip, port)
+    if path:
+        url += "/" + path
+    return url
+
+
+def camera_url(cam):
+    """آدرس نهایی استریم یک دوربین: url ذخیره‌شده، یا ساخته‌شده از اجزا."""
+    if not isinstance(cam, dict):
+        return ""
+    direct = (cam.get("url") or "").strip()
+    if direct:
+        return direct
+    return build_rtsp_url(cam.get("ip"), cam.get("port"),
+                          cam.get("user"), cam.get("pass"),
+                          cam.get("path"))
 
 
 class CameraStore:
@@ -26,6 +59,11 @@ class CameraStore:
             c.setdefault("id", uuid.uuid4().hex[:8])
             c.setdefault("name", "")
             c.setdefault("url", "")
+            c.setdefault("ip", "")
+            c.setdefault("port", "554")
+            c.setdefault("user", "")
+            c.setdefault("pass", "")
+            c.setdefault("path", "")
             c.setdefault("enabled", True)
 
     def save(self):
@@ -37,17 +75,26 @@ class CameraStore:
             json.dump({"cameras": self.cameras}, f, ensure_ascii=False, indent=1)
         os.replace(tmp, self.path)
 
-    def add(self, name, url):
+    def add(self, name, ip="", port="554", user="", pwd="", path="", url=""):
         cam = {"id": uuid.uuid4().hex[:8], "name": name.strip(),
-               "url": url.strip(), "enabled": True}
+               "ip": ip.strip(), "port": (port or "554").strip(),
+               "user": user.strip(), "pass": pwd or "",
+               "path": path.strip(), "url": url.strip(),
+               "enabled": True}
         self.cameras.append(cam)
         self.save()
         return cam
 
-    def update(self, cam_id, name, url):
+    def update(self, cam_id, name, ip="", port="554", user="", pwd="",
+               path="", url=""):
         for c in self.cameras:
             if c["id"] == cam_id:
                 c["name"] = name.strip()
+                c["ip"] = ip.strip()
+                c["port"] = (port or "554").strip()
+                c["user"] = user.strip()
+                c["pass"] = pwd or ""
+                c["path"] = path.strip()
                 c["url"] = url.strip()
                 self.save()
                 return True
@@ -62,4 +109,5 @@ class CameraStore:
         return False
 
     def enabled_cameras(self):
-        return [c for c in self.cameras if c.get("enabled") and c.get("url")]
+        return [c for c in self.cameras
+                if c.get("enabled") and camera_url(c)]
