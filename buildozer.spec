@@ -85,3 +85,6 @@ log_level = 2
 
 # (str) python-for-android branch to use
 # p4a.branch = master
+
+# (str) Local p4a recipes directory (for patched ffpyplayer)
+p4a.local_recipes = ./p4a_recipes
