@@ -5,7 +5,7 @@
 home (صفحه‌ی اصلی) و settings (تنظیمات).
 
 کاربران پیش‌فرض (در اولین اجرا ساخته می‌شوند):
-- admin / Aa@@Sorena — ادمین، تعویض رمز در اولین ورود اجباری
+- admin / A12345678a — ادمین، تعویض رمز در اولین ورود اجباری
 - Test / 123456 — فقط صفحه‌ی اصلی و تنظیمات
 """
 import hashlib
@@ -15,7 +15,7 @@ import os
 import secrets
 
 DEFAULT_ADMIN_USER = "admin"
-DEFAULT_ADMIN_PASS = "Aa@@Sorena"
+DEFAULT_ADMIN_PASS = "A12345678a"
 
 DEFAULT_TEST_USER = "Test"
 DEFAULT_TEST_PASS = "123456"
