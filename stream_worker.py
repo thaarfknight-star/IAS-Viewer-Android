@@ -166,3 +166,126 @@ class StreamWorker(threading.Thread):
                 self._state("error")
             if self._stop.wait(self.reconnect_delay):
                 break
+
+
+AUDIO_FF_OPTS = {
+    "vn": True,         # بدون ویدیو (فقط صدا)
+    "sn": True,         # بدون زیرنویس
+    "sync": "audio",    # کلاک اصلی = صدا
+    # آپشن‌های RTSP (مثل ویدیو)
+    "rtsp_transport": "tcp",
+    "stimeout": "5000000",
+    "max_delay": "300000",
+    "buffer_size": "102400",
+    "fflags": "nobuffer",
+    "flags": "low_delay",
+    "reconnect": "1",
+    "reconnect_streamed": "1",
+    "reconnect_delay_max": "5",
+    "rw_timeout": "5000000",
+}
+
+
+class AudioWorker(threading.Thread):
+    """پخش صدای دوربین از RTSP — مثل نسخه ویندوز (ترک صوتی جدا).
+
+    on_state(state): یکی از "connecting" | "live" | "error" | "no_audio".
+    صدا از همان آدرس RTSP تصویر گرفته می‌شود (ترک صوتی جدا).
+    """
+
+    def __init__(self, url, on_state=None, reconnect_delay=3.0):
+        super().__init__(daemon=True)
+        self.url = url
+        self.on_state = on_state
+        self.reconnect_delay = reconnect_delay
+        self._stop = threading.Event()
+        self._dead = threading.Event()
+
+    def stop(self):
+        self._stop.set()
+        self._dead.set()
+
+    def _state(self, s):
+        if self.on_state:
+            try:
+                self.on_state(s)
+            except Exception:
+                pass
+
+    def _run_once(self):
+        try:
+            from ffpyplayer.player import MediaPlayer
+        except Exception:
+            self._dead.set()
+            return
+        player = None
+        try:
+            player = MediaPlayer(self.url, ff_opts=dict(AUDIO_FF_OPTS),
+                                 lib_opts=dict(LIB_OPTS))
+            # انتظار برای اطلاعات ترک صوتی
+            t0 = time.time()
+            has_audio = False
+            while True:
+                if self._stop.is_set() or self._dead.is_set():
+                    return
+                try:
+                    meta = player.get_metadata()
+                except Exception:
+                    self._dead.set()
+                    return
+                # بررسی وجود ترک صوتی
+                if meta.get("audio_codec") or meta.get("src_audio_size"):
+                    has_audio = True
+                    break
+                # اگر ویدیو هم نداریم، یعنی کلاً استریم مشکل دارد
+                if meta.get("src_vid_size") not in (None, (0, 0)):
+                    # ویدیو هست ولی صدا نیست
+                    pass
+                if time.time() - t0 > 10:
+                    break
+                time.sleep(0.2)
+            if not has_audio:
+                # بررسی نهایی: آیا اصلاً ترک صوتی دارد؟
+                try:
+                    meta = player.get_metadata()
+                    if not (meta.get("audio_codec") or meta.get("audio")):
+                        self._state("no_audio")
+                        self._dead.set()
+                        return
+                except Exception:
+                    pass
+            self._state("live")
+            # حلقه نگه‌دارنده: ffpyplayer خودش صدا را پخش می‌کند
+            # فقط وضعیت را چک می‌کنیم
+            while not self._stop.is_set() and not self._dead.is_set():
+                try:
+                    frame, val = player.get_frame()
+                except Exception:
+                    self._dead.set()
+                    break
+                if val == "eof":
+                    self._dead.set()
+                    break
+                # فریم‌های صوتی توسط ffpyplayer خودکار پخش می‌شوند
+                # ما فقط حلقه را زنده نگه می‌داریم
+                if frame is None:
+                    time.sleep(0.05)
+        finally:
+            if player is not None:
+                try:
+                    player.close_player()
+                except Exception:
+                    pass
+
+    def run(self):
+        while not self._stop.is_set():
+            self._dead.clear()
+            self._state("connecting")
+            try:
+                self._run_once()
+            except Exception:
+                pass
+            if self._dead.is_set() and not self._stop.is_set():
+                self._state("error")
+            if self._stop.wait(self.reconnect_delay):
+                break
