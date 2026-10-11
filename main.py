@@ -46,7 +46,7 @@ from camera_store import CameraStore, camera_url, build_rtsp_url
 _dlog('camera_store ok')
 from network_scan import NetworkScanner
 _dlog('network_scan ok')
-from stream_worker import StreamWorker
+from stream_worker import StreamWorker, AudioWorker
 _dlog('stream_worker ok')
 try:
     from ffpyplayer.player import MediaPlayer
@@ -234,15 +234,22 @@ class CameraTile(BoxLayout):
                                          radius=[RADIUS])
         self.bind(pos=self._sync_bg, size=self._sync_bg)
 
-        # نوار بالا: نام + قرص وضعیت
+        # نوار بالا: نام + قرص وضعیت + دکمه صدا
         top = BoxLayout(orientation="horizontal", size_hint_y=None,
                         height=dp(30), spacing=dp(6))
         name = cam.get("name") or cam.get("ip") or "؟"
         self.name_lbl = mk_label(name, size="13sp", bold=True,
-                                 halign="right", size_hint_x=0.65)
+                                 halign="right", size_hint_x=0.55)
         self.pill = mk_label("…", size="11sp", bold=True,
-                             size_hint_x=0.35, height=24)
+                             size_hint_x=0.30, height=24)
         rounded_bg(self.pill, C_BORDER, dp(12))
+        # دکمه صدا
+        self.audio_btn = mk_button("🔇", self.toggle_audio,
+                                   size_hint_x=0.15, height=24,
+                                   font_size="14sp", bg=C_CARD)
+        self.audio_worker = None
+        self.audio_on = False
+        top.add_widget(self.audio_btn)
         top.add_widget(self.pill)
         top.add_widget(self.name_lbl)
         self.add_widget(top)
@@ -288,6 +295,48 @@ class CameraTile(BoxLayout):
         if w:
             try:
                 w.stop()
+            except Exception:
+                pass
+        self.stop_audio()
+
+    def toggle_audio(self, *_):
+        if self.audio_on:
+            self.stop_audio()
+        else:
+            self.start_audio()
+
+    def start_audio(self):
+        self.stop_audio()
+        url = camera_url(self.cam)
+        if not url:
+            return
+        def _astate(st):
+            Clock.schedule_once(lambda dt: self._on_audio_state(st))
+        self.audio_worker = AudioWorker(url, _astate)
+        self.audio_worker.start()
+        self.audio_on = True
+        self.audio_btn.text = "🔊"
+
+    def stop_audio(self):
+        w, self.audio_worker = self.audio_worker, None
+        if w:
+            try:
+                w.stop()
+            except Exception:
+                pass
+        self.audio_on = False
+        try:
+            self.audio_btn.text = "🔇"
+        except Exception:
+            pass
+
+    def _on_audio_state(self, st):
+        if st == "no_audio":
+            self.stop_audio()
+            # اطلاع به کاربر
+            try:
+                from kivy.uix.label import Label
+                # TODO: نمایش پیام «صدا پشتیبانی نمی‌شود»
             except Exception:
                 pass
 
