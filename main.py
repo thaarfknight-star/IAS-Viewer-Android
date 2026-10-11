@@ -797,16 +797,32 @@ def _cam_form(self, cam, prefill=None, nvr_mode=False):
 
             def detect():
                 found = ""
-                for p in paths:
+                # تست موازی برای سرعت بیشتر (حداکثر ۴ همزمان)
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                def _try_path(p):
                     if detect_state["cancel"]:
-                        return
-                    Clock.schedule_once(
-                        lambda dt, pp=p: set_busy(
-                            True, "در حال بررسی: %s…" % fa_ltr(pp)))
+                        return None
                     url = build_rtsp_url(ip, port, user, pwd, p)
-                    if StreamWorker.probe(url):
-                        found = p
-                        break
+                    # تایم‌اوت کمتر برای سرعت (۴ ثانیه)
+                    if StreamWorker.probe(url, timeout=4.0):
+                        return p
+                    return None
+                # مرتب‌سازی: مسیرهای رایج اول
+                priority = ["Streaming/Channels/101", "h264/ch1/main/av_stream",
+                            "cam/realmonitor?channel=1&subtype=0", "live/ch0"]
+                ordered = sorted(paths, key=lambda p: (0 if p in priority else 1))
+                with ThreadPoolExecutor(max_workers=4) as ex:
+                    futs = {ex.submit(_try_path, p): p for p in ordered}
+                    for fut in as_completed(futs):
+                        if detect_state["cancel"]:
+                            break
+                        r = fut.result()
+                        if r:
+                            found = r
+                            # لغو بقیه
+                            for f in futs:
+                                f.cancel()
+                            break
                 def _done(dt):
                     if detect_state["cancel"]:
                         return
@@ -922,9 +938,9 @@ class SettingsScreen(Screen):
         return card
 
     def build(self):
-        self.content.clear_widgets()
-        app = App.get_running_app()
         try:
+            self.content.clear_widgets()
+            app = App.get_running_app()
             self._build_inner(app)
         except Exception as e:
             import traceback

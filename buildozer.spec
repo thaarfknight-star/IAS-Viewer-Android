@@ -42,7 +42,7 @@ android.permissions = INTERNET
 android.api = 33
 
 # (int) Minimum Android API
-android.minapi = 24
+android.minapi = 21
 
 # (int) Numeric versionCode for the APK. The real value comes from the
 # APP_ANDROID_NUMERIC_VERSION env var set by the workflow (buildozer
