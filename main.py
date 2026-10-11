@@ -234,19 +234,19 @@ class CameraTile(BoxLayout):
                                          radius=[RADIUS])
         self.bind(pos=self._sync_bg, size=self._sync_bg)
 
-        # نوار بالا: نام + قرص وضعیت + دکمه صدا
+        # نوار بالا: نام + قرص وضعیت + دکمه صدا (بزرگ برای لمس راحت)
         top = BoxLayout(orientation="horizontal", size_hint_y=None,
-                        height=dp(30), spacing=dp(6))
+                        height=dp(48), spacing=dp(6))
         name = cam.get("name") or cam.get("ip") or "؟"
         self.name_lbl = mk_label(name, size="13sp", bold=True,
-                                 halign="right", size_hint_x=0.55)
+                                 halign="right", size_hint_x=0.50)
         self.pill = mk_label("…", size="11sp", bold=True,
-                             size_hint_x=0.30, height=24)
+                             size_hint_x=0.28, height=32)
         rounded_bg(self.pill, C_BORDER, dp(12))
-        # دکمه صدا
+        # دکمه صدا — بزرگ (حداقل ۴۸dp برای لمس راحت با انگشت)
         self.audio_btn = mk_button("🔇", self.toggle_audio,
-                                   size_hint_x=0.15, height=24,
-                                   font_size="14sp", bg=C_CARD)
+                                   size_hint_x=0.22, height=44,
+                                   font_size="20sp", bg=C_CARD)
         self.audio_worker = None
         self.audio_on = False
         top.add_widget(self.audio_btn)
