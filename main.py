@@ -487,32 +487,75 @@ class MainScreen(MainScreenAddMixin, Screen):
         header.add_widget(logo)
         root.add_widget(header)
 
-        # گرید ۲×۲
-        self.grid = GridLayout(cols=2, rows=2, spacing=dp(10))
-        root.add_widget(self.grid)
+        # گرید ۲×۲ با تایل‌های افقی (۱۶:۹)
+        # برای افقی شدن، از ScrollView با BoxLayout عمودی استفاده می‌کنیم
+        # هر ردیف ۲ تایل افقی دارد
+        scroll = ScrollView()
+        grid_box = BoxLayout(orientation="vertical", spacing=dp(10),
+                             size_hint_y=None, padding=dp(2))
+        grid_box.bind(minimum_height=grid_box.setter("height"))
+        self.grid_rows = []  # ردیف‌ها
+        for _ in range(2):
+            row = BoxLayout(orientation="horizontal", spacing=dp(10),
+                            size_hint_y=None, height=dp(180))
+            self.grid_rows.append(row)
+            grid_box.add_widget(row)
+        # نگهداری grid قدیمی برای سازگاری (rebuild_grid از آن استفاده می‌کند)
+        self.grid = grid_box
+        scroll.add_widget(grid_box)
+        root.add_widget(scroll)
+
+        # دکمه‌های افزودن زیر تصاویر
+        btn_row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                            height=dp(52), spacing=dp(8))
+        btn_row.add_widget(mk_button("اسکن شبکه", self.open_scan_main,
+                                     bg=C_CARD, font_size="14sp"))
+        btn_row.add_widget(mk_button("افزودن NVR", self.add_nvr,
+                                     bg=C_CARD, font_size="14sp"))
+        btn_row.add_widget(mk_button("افزودن دوربین", self.add_camera,
+                                     font_size="14sp"))
+        root.add_widget(btn_row)
         self.add_widget(root)
 
     def on_enter(self):
         self.rebuild_grid()
 
     def on_leave(self):
-        for child in self.grid.children:
-            if isinstance(child, CameraTile):
-                child.stop()
+        for row in self.grid_rows:
+            for child in row.children:
+                if isinstance(child, CameraTile):
+                    child.stop()
 
     def rebuild_grid(self):
-        for child in list(self.grid.children):
-            if isinstance(child, CameraTile):
-                child.stop()
-            self.grid.remove_widget(child)
+        # پاک کردن ردیف‌ها
+        for row in self.grid_rows:
+            for child in list(row.children):
+                if isinstance(child, CameraTile):
+                    child.stop()
+                row.remove_widget(child)
         app = App.get_running_app()
         cams = app.cameras.cameras[:4]
+        tiles = []
         for cam in cams:
             tile = CameraTile(cam)
-            self.grid.add_widget(tile)
-            tile.start()
+            tiles.append(tile)
         for _ in range(4 - len(cams)):
-            self.grid.add_widget(EmptyTile(self.add_camera))
+            tiles.append(EmptyTile(self.add_camera))
+        # چیدن در ۲ ردیف ۲تایی
+        for i, tile in enumerate(tiles):
+            self.grid_rows[i // 2].add_widget(tile)
+            if isinstance(tile, CameraTile):
+                tile.start()
+
+    def add_nvr(self, *_):
+        # افزودن NVR: فرم دوربین با حالت NVR
+        self.cam_form(None, nvr_mode=True)
+
+    def open_scan_main(self, *_):
+        # اسکن شبکه از صفحه اصلی
+        def _on_ip_picked(ip):
+            self.cam_form(None, prefill={"ip": ip, "name": ip})
+        self.open_scan(_on_ip_picked)
 
     # -------------------------------------------------------- تمام‌صفحه --
     def open_fullscreen(self, cam):
@@ -573,7 +616,7 @@ class MainScreen(MainScreenAddMixin, Screen):
 
 
 # ============================================================ فرم دوربین
-def _cam_form(self, cam, prefill=None):
+def _cam_form(self, cam, prefill=None, nvr_mode=False):
         is_new = cam is None
         prefill = prefill or {}
         box = BoxLayout(orientation="vertical", spacing=dp(10),
@@ -615,6 +658,10 @@ def _cam_form(self, cam, prefill=None):
         type_box.add_widget(btn_type_nvr)
         box.add_widget(type_box)
         cam_type = {"v": "cam"}
+
+        # اگر حالت NVR خواسته شده، بعد از ساخت فرم فعالش کن
+        if nvr_mode:
+            Clock.schedule_once(lambda dt: set_type("nvr"), 0.1)
 
         def set_type(t):
             cam_type["v"] = t
@@ -877,7 +924,19 @@ class SettingsScreen(Screen):
     def build(self):
         self.content.clear_widgets()
         app = App.get_running_app()
+        try:
+            self._build_inner(app)
+        except Exception as e:
+            import traceback
+            try:
+                with open("/sdcard/Download/ias_settings_crash.log", "w", encoding="utf-8") as f:
+                    f.write(traceback.format_exc())
+            except Exception:
+                pass
+            self.content.add_widget(mk_label("خطا در تنظیمات: " + str(e),
+                                             color=C_ERR))
 
+    def _build_inner(self, app):
         # --- دوربین‌ها ---
         card = self.section("دوربین‌ها")
         for cam in app.cameras.cameras:
