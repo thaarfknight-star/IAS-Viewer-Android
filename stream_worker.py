@@ -81,12 +81,16 @@ class StreamWorker(threading.Thread):
     # برای سازگاری با کد قدیمی که probe را از روی کلاس صدا می‌زند
     probe = staticmethod(probe)
 
-    def __init__(self, url, on_frame, on_state=None, reconnect_delay=3.0):
+    def __init__(self, url, on_frame, on_state=None, reconnect_delay=3.0,
+                 max_fps=0):
         super().__init__(daemon=True)
         self.url = url
         self.on_frame = on_frame
         self.on_state = on_state
         self.reconnect_delay = reconnect_delay
+        # محدودیت فریم‌ریت برای بهینه‌سازی (0 = بدون محدودیت)
+        # گرید: 10fps کافی است؛ fullscreen: بدون محدودیت
+        self.max_fps = max_fps
         self._stop = threading.Event()
         self._dead = threading.Event()
 
@@ -128,6 +132,8 @@ class StreamWorker(threading.Thread):
                     return
                 time.sleep(0.1)
             self._state("live")
+            min_interval = 1.0 / self.max_fps if self.max_fps > 0 else 0
+            last_frame_t = 0.0
             while not self._stop.is_set() and not self._dead.is_set():
                 try:
                     frame, val = player.get_frame()
@@ -137,6 +143,11 @@ class StreamWorker(threading.Thread):
                 if val == "eof" or frame is None:
                     time.sleep(0.01)
                     continue
+                # محدودیت فریم‌ریت: فریم‌های اضافی را دور بریز
+                now = time.time()
+                if min_interval > 0 and (now - last_frame_t) < min_interval:
+                    continue
+                last_frame_t = now
                 try:
                     img, _pts = frame
                     buf = bytes(img.to_memoryview()[0])  # کپی امن بین نخ‌ها
