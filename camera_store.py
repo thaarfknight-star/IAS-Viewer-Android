@@ -40,6 +40,38 @@ def camera_url(cam):
                           cam.get("user"), cam.get("pass"),
                           cam.get("path"))
 
+def sub_path_for(main_path):
+    """حدس مسیر ساب‌استریم (رزولوشن پایین) از روی مسیر اصلی.
+
+    گرید از ساب‌استریم استفاده می‌کند (پهنای باند و CPU خیلی کمتر)،
+    fullscreen از استریم اصلی.
+    """
+    p = (main_path or "").strip()
+    if not p:
+        return ""
+    # Dahua
+    if "subtype=0" in p:
+        return p.replace("subtype=0", "subtype=1")
+    if "subtype=1" in p:
+        return p
+    # Hikvision: .../101 -> .../102
+    import re
+    m = re.search(r"(Streaming/Channels/\d+)01$", p)
+    if m:
+        return m.group(1) + "02"
+    if re.search(r"(Streaming/Channels/\d+)02$", p):
+        return p
+    # h264/ch1/main/... -> h264/ch1/sub/...
+    if "/main/" in p:
+        return p.replace("/main/", "/sub/")
+    if "/sub/" in p:
+        return p
+    # live/main -> live/sub
+    if p.endswith("/main"):
+        return p[:-5] + "/sub"
+    return ""
+
+
 
 class CameraStore:
     def __init__(self, path):
@@ -67,6 +99,7 @@ class CameraStore:
             c.setdefault("nvr_channel", "")
             c.setdefault("nvr_id", "")
             c.setdefault("channel", 0)
+            c.setdefault("sub_path", "")
             c.setdefault("enabled", True)
 
     def save(self):
@@ -87,6 +120,7 @@ class CameraStore:
                "nvr_channel": (nvr_channel or "").strip(),
                "nvr_id": (nvr_id or "").strip(),
                "channel": int(channel or 0),
+               "sub_path": "",
                "enabled": True}
         self.cameras.append(cam)
         self.save()
@@ -134,3 +168,19 @@ class CameraStore:
     def enabled_cameras(self):
         return [c for c in self.cameras
                 if c.get("enabled") and camera_url(c)]
+
+
+def camera_sub_url(cam):
+    """آدرس ساب‌استریم؛ اگر نبود همان آدرس اصلی."""
+    if not isinstance(cam, dict):
+        return ""
+    sub = (cam.get("sub_path") or "").strip()
+    if sub:
+        return build_rtsp_url(cam.get("ip"), cam.get("port"),
+                              cam.get("user"), cam.get("pass"), sub)
+    # حدس از روی مسیر اصلی
+    guessed = sub_path_for(cam.get("path") or "")
+    if guessed:
+        return build_rtsp_url(cam.get("ip"), cam.get("port"),
+                              cam.get("user"), cam.get("pass"), guessed)
+    return camera_url(cam)
