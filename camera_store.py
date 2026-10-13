@@ -64,6 +64,9 @@ class CameraStore:
             c.setdefault("user", "")
             c.setdefault("pass", "")
             c.setdefault("path", "")
+            c.setdefault("nvr_channel", "")
+            c.setdefault("nvr_id", "")
+            c.setdefault("channel", 0)
             c.setdefault("enabled", True)
 
     def save(self):
@@ -76,19 +79,21 @@ class CameraStore:
         os.replace(tmp, self.path)
 
     def add(self, name, ip="", port="554", user="", pwd="", path="", url="",
-            nvr_channel=""):
+            nvr_channel="", nvr_id="", channel=0):
         cam = {"id": uuid.uuid4().hex[:8], "name": name.strip(),
                "ip": ip.strip(), "port": (port or "554").strip(),
                "user": user.strip(), "pass": pwd or "",
                "path": path.strip(), "url": url.strip(),
                "nvr_channel": (nvr_channel or "").strip(),
+               "nvr_id": (nvr_id or "").strip(),
+               "channel": int(channel or 0),
                "enabled": True}
         self.cameras.append(cam)
         self.save()
         return cam
 
     def update(self, cam_id, name, ip="", port="554", user="", pwd="",
-               path="", url="", nvr_channel=""):
+               path="", url="", nvr_channel="", nvr_id="", channel=0):
         for c in self.cameras:
             if c["id"] == cam_id:
                 c["name"] = name.strip()
@@ -99,8 +104,23 @@ class CameraStore:
                 c["path"] = path.strip()
                 c["url"] = url.strip()
                 c["nvr_channel"] = (nvr_channel or "").strip()
+                c["nvr_id"] = (nvr_id or "").strip()
+                c["channel"] = int(channel or 0)
                 self.save()
                 return True
+        return False
+
+    def cameras_for_nvr(self, nvr_id):
+        """همه‌ی کانال‌های یک NVR."""
+        return [c for c in self.cameras if c.get("nvr_id") == nvr_id]
+
+    def delete_for_nvr(self, nvr_id):
+        """حذف همه‌ی کانال‌های یک NVR."""
+        n = len(self.cameras)
+        self.cameras = [c for c in self.cameras if c.get("nvr_id") != nvr_id]
+        if len(self.cameras) != n:
+            self.save()
+            return True
         return False
 
     def delete(self, cam_id):
