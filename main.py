@@ -234,22 +234,15 @@ class CameraTile(BoxLayout):
                                          radius=[RADIUS])
         self.bind(pos=self._sync_bg, size=self._sync_bg)
 
-        # نوار بالا: نام + قرص وضعیت + دکمه صدا (بزرگ برای لمس راحت)
+        # نوار بالا: نام + قرص وضعیت
         top = BoxLayout(orientation="horizontal", size_hint_y=None,
-                        height=dp(48), spacing=dp(6))
+                        height=dp(30), spacing=dp(6))
         name = cam.get("name") or cam.get("ip") or "؟"
         self.name_lbl = mk_label(name, size="13sp", bold=True,
-                                 halign="right", size_hint_x=0.50)
+                                 halign="right", size_hint_x=0.65)
         self.pill = mk_label("…", size="11sp", bold=True,
-                             size_hint_x=0.28, height=32)
+                             size_hint_x=0.35, height=24)
         rounded_bg(self.pill, C_BORDER, dp(12))
-        # دکمه صدا — بزرگ (حداقل ۴۸dp برای لمس راحت با انگشت)
-        self.audio_btn = mk_button("🔇", self.toggle_audio,
-                                   size_hint_x=0.22, height=44,
-                                   font_size="20sp", bg=C_CARD)
-        self.audio_worker = None
-        self.audio_on = False
-        top.add_widget(self.audio_btn)
         top.add_widget(self.pill)
         top.add_widget(self.name_lbl)
         self.add_widget(top)
@@ -295,48 +288,6 @@ class CameraTile(BoxLayout):
         if w:
             try:
                 w.stop()
-            except Exception:
-                pass
-        self.stop_audio()
-
-    def toggle_audio(self, *_):
-        if self.audio_on:
-            self.stop_audio()
-        else:
-            self.start_audio()
-
-    def start_audio(self):
-        self.stop_audio()
-        url = camera_url(self.cam)
-        if not url:
-            return
-        def _astate(st):
-            Clock.schedule_once(lambda dt: self._on_audio_state(st))
-        self.audio_worker = AudioWorker(url, _astate)
-        self.audio_worker.start()
-        self.audio_on = True
-        self.audio_btn.text = "🔊"
-
-    def stop_audio(self):
-        w, self.audio_worker = self.audio_worker, None
-        if w:
-            try:
-                w.stop()
-            except Exception:
-                pass
-        self.audio_on = False
-        try:
-            self.audio_btn.text = "🔇"
-        except Exception:
-            pass
-
-    def _on_audio_state(self, st):
-        if st == "no_audio":
-            self.stop_audio()
-            # اطلاع به کاربر
-            try:
-                from kivy.uix.label import Label
-                # TODO: نمایش پیام «صدا پشتیبانی نمی‌شود»
             except Exception:
                 pass
 
@@ -612,19 +563,58 @@ class MainScreen(MainScreenAddMixin, Screen):
                         padding=dp(12))
         top = BoxLayout(orientation="horizontal", size_hint_y=None,
                         height=dp(48), spacing=dp(8))
-        top.add_widget(mk_button("بازگشت", lambda *_: popup.dismiss(),
+        top.add_widget(mk_button("بازگشت", lambda *_: _close(),
                                  bg=C_CARD, size_hint_x=0.35, height=44))
         top.add_widget(mk_label(cam.get("name") or "", size="16sp",
                                bold=True, halign="right"))
         box.add_widget(top)
         img = Image(allow_stretch=True, keep_ratio=True)
         box.add_widget(img)
+        # نوار پایین: دکمه‌ی بزرگ صدا
+        bottom = BoxLayout(orientation="horizontal", size_hint_y=None,
+                           height=dp(64), spacing=dp(8))
+        audio_state = {"on": False, "worker": None}
+        audio_btn = mk_button("🔇 بدون صدا", None, height=56,
+                              font_size="18sp", bg=C_CARD)
+        def _toggle_audio(*_):
+            if audio_state["on"]:
+                w = audio_state["worker"]
+                audio_state["worker"] = None
+                audio_state["on"] = False
+                if w:
+                    try:
+                        w.stop()
+                    except Exception:
+                        pass
+                audio_btn.text = "🔇 بدون صدا"
+            else:
+                url = camera_url(cam)
+                if not url:
+                    return
+                audio_btn.text = "⏳ در حال اتصال…"
+                def _astate(st):
+                    def _ui(dt):
+                        if st == "live":
+                            audio_btn.text = "🔊 در حال پخش"
+                        elif st == "no_audio":
+                            audio_btn.text = "🔇 بدون صدا"
+                            _toggle_audio()
+                        elif st == "error":
+                            audio_btn.text = "🔇 خطا"
+                    Clock.schedule_once(_ui)
+                audio_state["worker"] = AudioWorker(url, _astate)
+                audio_state["worker"].start()
+                audio_state["on"] = True
+        audio_btn.bind(on_release=_toggle_audio)
+        bottom.add_widget(audio_btn)
+        box.add_widget(bottom)
         popup = Popup(title="", content=box, size_hint=(0.96, 0.92),
                       background="", background_color=(0, 0, 0, 0),
                       separator_color=(0, 0, 0, 0))
         rounded_bg(box, C_BG, RADIUS)
 
-        worker = {"w": None}
+        worker = {"w": None, "popup": None}
+        worker["popup"] = popup
 
         def _frame(buf, w, h):
             Clock.schedule_once(lambda dt: blit(buf, w, h))
@@ -652,6 +642,12 @@ class MainScreen(MainScreenAddMixin, Screen):
             if w:
                 try:
                     w.stop()
+                except Exception:
+                    pass
+            aw = audio_state["worker"]
+            if aw:
+                try:
+                    aw.stop()
                 except Exception:
                     pass
             popup.dismiss()
