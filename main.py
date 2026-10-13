@@ -42,7 +42,7 @@ from ptext import fa, fa_ltr, FONT, FONT_BOLD
 _dlog('ptext ok')
 from user_store import UserStore
 _dlog('user_store ok')
-from camera_store import CameraStore, camera_url, build_rtsp_url
+from camera_store import CameraStore, camera_url, camera_sub_url, build_rtsp_url, sub_path_for
 from nvr_store import NVRStore
 _dlog('camera_store ok')
 from network_scan import NetworkScanner
@@ -270,7 +270,8 @@ class CameraTile(BoxLayout):
     # ---------------------------------------------------------- استریم --
     def start(self):
         self.stop()
-        url = camera_url(self.cam)
+        # گرید: ساب‌استریم (رزولوشن پایین) + حداکثر ۱۰ فریم بر ثانیه
+        url = camera_sub_url(self.cam)
         if not url:
             self.set_state("error")
             return
@@ -281,7 +282,7 @@ class CameraTile(BoxLayout):
         def _state(st):
             Clock.schedule_once(lambda dt: self.set_state(st))
 
-        self.worker = StreamWorker(url, _frame, _state)
+        self.worker = StreamWorker(url, _frame, _state, max_fps=10)
         self.worker.start()
 
     def stop(self):
@@ -1080,8 +1081,15 @@ def _cam_form(self, cam, prefill=None, nvr_mode=False):
                         return
                     set_busy(False)
                     if found:
+                        # ساب‌استریم را هم پیدا کن (برای گرید بهینه)
+                        sub = sub_path_for(found)
+                        sub_ok = ""
+                        if sub:
+                            sub_url = build_rtsp_url(ip, port, user, pwd, sub)
+                            if StreamWorker.probe(sub_url, timeout=3.0):
+                                sub_ok = sub
                         do_save(name, ip, port, user, pwd, found,
-                                nvr_channel)
+                                nvr_channel, sub_path=sub_ok)
                     else:
                         msg.text = fa("مسیری پیدا نشد. دستی وارد کنید یا "
                                       "تیک تشخیص خودکار را بردارید.")
@@ -1089,7 +1097,8 @@ def _cam_form(self, cam, prefill=None, nvr_mode=False):
                 Clock.schedule_once(_done)
             threading.Thread(target=detect, daemon=True).start()
 
-        def do_save(name, ip, port, user, pwd, path, nvr_channel=""):
+        def do_save(name, ip, port, user, pwd, path, nvr_channel="",
+                      sub_path=""):
             app = App.get_running_app()
             if is_new:
                 for c in app.cameras.cameras:
@@ -1098,9 +1107,12 @@ def _cam_form(self, cam, prefill=None, nvr_mode=False):
                         msg.color = C_ERR
                         set_busy(False)
                         return
-                app.cameras.add(name, ip=ip, port=port, user=user,
+                cam = app.cameras.add(name, ip=ip, port=port, user=user,
                                 pwd=pwd, path=path,
                                 nvr_channel=nvr_channel)
+                if sub_path:
+                    cam["sub_path"] = sub_path
+                    app.cameras.save()
             else:
                 app.cameras.update(cam["id"], name, ip=ip, port=port,
                                    user=user, pwd=pwd, path=path,
