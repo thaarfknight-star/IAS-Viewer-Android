@@ -43,6 +43,7 @@ _dlog('ptext ok')
 from user_store import UserStore
 _dlog('user_store ok')
 from camera_store import CameraStore, camera_url, build_rtsp_url
+from nvr_store import NVRStore
 _dlog('camera_store ok')
 from network_scan import NetworkScanner
 _dlog('network_scan ok')
@@ -548,8 +549,214 @@ class MainScreen(MainScreenAddMixin, Screen):
                 tile.start()
 
     def add_nvr(self, *_):
-        # افزودن NVR: فرم دوربین با حالت NVR
-        self.cam_form(None, nvr_mode=True)
+        # افزودن NVR مثل نسخه ویندوز: اطلاعات NVR + شناسایی کانال‌ها
+        self.nvr_form()
+    def nvr_form(self, nvr=None):
+        """دیالوگ افزودن/ویرایش NVR مثل نسخه ویندوز.
+
+        فیلدها: نام، IP، پورت RTSP، نام کاربری، رمز، برند، تعداد کانال.
+        دکمه‌ی «شناسایی کانال‌ها» کانال‌ها را پروب می‌کند و با چک‌باکس
+        نمایش می‌دهد. ذخیره: NVR + کانال‌های انتخاب‌شده به‌عنوان دوربین.
+        """
+        is_new = nvr is None
+        box = BoxLayout(orientation="vertical", spacing=dp(10),
+                        padding=dp(16))
+        rounded_bg(box, C_BG, RADIUS)
+        box.add_widget(mk_label("افزودن NVR" if is_new else "ویرایش NVR",
+                                size="18sp", bold=True, height=32))
+
+        name_in = mk_input("Name")
+        ip_in = mk_input("IP Address")
+        port_in = mk_input("RTSP Port", text="554")
+        user_in = mk_input("Username", text="admin")
+        pass_in = mk_input("Password", password=True)
+        # برند
+        brand_box = BoxLayout(orientation="horizontal", size_hint_y=None,
+                              height=dp(50), spacing=dp(8))
+        brand_box.add_widget(mk_label("برند:", size="14sp",
+                                     size_hint_x=0.3, halign="right"))
+        from kivy.uix.spinner import Spinner
+        brand_sp = Spinner(text="خودکار", values=("خودکار", "Dahua", "Hikvision"),
+                           size_hint_x=0.7, height=dp(50),
+                           background_color=C_CARD)
+        brand_box.add_widget(brand_sp)
+        # تعداد کانال
+        chan_box = BoxLayout(orientation="horizontal", size_hint_y=None,
+                             height=dp(50), spacing=dp(8))
+        chan_box.add_widget(mk_label("تعداد کانال:", size="14sp",
+                                     size_hint_x=0.3, halign="right"))
+        maxch_in = mk_input("Max Channels", text="16")
+        maxch_in.size_hint_x = 0.7
+        chan_box.add_widget(maxch_in)
+
+        if not is_new:
+            name_in.text = nvr.get("name", "")
+            ip_in.text = nvr.get("ip", "")
+            port_in.text = str(nvr.get("port", "554"))
+            user_in.text = nvr.get("user", "")
+            pass_in.text = nvr.get("pass", "")
+            b = nvr.get("brand", "")
+            brand_sp.text = b if b in ("Dahua", "Hikvision") else "خودکار"
+            maxch_in.text = str(nvr.get("max_channels", 16))
+
+        msg = mk_label("", size="13sp", color=C_ERR, height=28)
+
+        # لیست کانال‌های پیدا شده
+        found_box = BoxLayout(orientation="vertical", spacing=dp(6),
+                              size_hint_y=None, padding=dp(4))
+        found_box.bind(minimum_height=found_box.setter("height"))
+        found_scroll = ScrollView(size_hint_y=None, height=dp(200))
+        found_scroll.add_widget(found_box)
+        found_state = {"channels": [], "checks": {}}
+
+        def _brand_paths(brand, ch):
+            if brand == "Dahua":
+                return ["cam/realmonitor?channel=%s&subtype=0" % ch,
+                        "cam/realmonitor?channel=%s&subtype=1" % ch]
+            if brand == "Hikvision":
+                return ["Streaming/Channels/%s01" % ch,
+                        "Streaming/Channels/%s" % ch]
+            return nvr_paths(ch)
+
+        def _scan_channels(*_):
+            ip = ip_in.text.strip()
+            port = port_in.text.strip() or "554"
+            user = user_in.text.strip() or "admin"
+            pwd = pass_in.text
+            brand = brand_sp.text
+            try:
+                maxch = int(maxch_in.text.strip() or "16")
+            except ValueError:
+                maxch = 16
+            maxch = max(1, min(maxch, 64))
+            if not ip:
+                msg.text = fa("آدرس IP را وارد کنید.")
+                return
+            msg.text = fa("در حال شناسایی کانال‌ها…")
+            msg.color = C_MUTED
+            found_box.clear_widgets()
+            found_state["channels"] = []
+            found_state["checks"] = {}
+
+            def _do_scan():
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                found = []
+                def _try_ch(ch):
+                    paths = _brand_paths(brand, ch)
+                    for p in paths:
+                        url = build_rtsp_url(ip, port, user, pwd, p)
+                        if StreamWorker.probe(url, timeout=4.0):
+                            return (ch, p)
+                    return None
+                with ThreadPoolExecutor(max_workers=4) as ex:
+                    futs = {ex.submit(_try_ch, ch): ch for ch in range(1, maxch + 1)}
+                    for fut in as_completed(futs):
+                        r = fut.result()
+                        if r:
+                            found.append(r)
+                found.sort()
+                def _show(dt):
+                    from kivy.uix.checkbox import CheckBox
+                    found_box.clear_widgets()
+                    if not found:
+                        msg.text = fa("کانالی پیدا نشد.")
+                        msg.color = C_ERR
+                        return
+                    msg.text = fa("%d کانال پیدا شد." % len(found))
+                    msg.color = C_MUTED
+                    for ch, path in found:
+                        row = BoxLayout(orientation="horizontal",
+                                        size_hint_y=None, height=dp(44),
+                                        spacing=dp(8))
+                        chk = CheckBox(active=True, size_hint_x=None,
+                                       width=dp(44), color=BRAND_BLUE_LT)
+                        found_state["checks"][ch] = (chk, path)
+                        row.add_widget(chk)
+                        row.add_widget(mk_label("کانال %d" % ch, size="14sp",
+                                                halign="right"))
+                        found_box.add_widget(row)
+                    found_state["channels"] = found
+                Clock.schedule_once(_show)
+            import threading
+            threading.Thread(target=_do_scan, daemon=True).start()
+
+        scan_btn = mk_button("🔍 شناسایی کانال‌ها", _scan_channels,
+                             bg=C_CARD, height=50)
+        box.add_widget(scan_btn)
+
+        form = BoxLayout(orientation="vertical", spacing=dp(10),
+                         size_hint_y=None, padding=dp(4))
+        form.bind(minimum_height=form.setter("height"))
+        for w in (name_in, ip_in, port_in, user_in, pass_in):
+            form.add_widget(w)
+        form.add_widget(brand_box)
+        form.add_widget(chan_box)
+        form.add_widget(msg)
+        form.add_widget(mk_label("کانال‌های پیدا شده:", size="14sp",
+                                 bold=True, halign="right", height=30))
+        form.add_widget(found_scroll)
+        scroll = ScrollView()
+        scroll.add_widget(form)
+        box.add_widget(scroll)
+
+        btn_row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                            height=dp(52), spacing=dp(10))
+        btn_row.add_widget(mk_button("انصراف", lambda *_: popup.dismiss(),
+                                     bg=C_CARD, height=52))
+        btn_row.add_widget(mk_button("💾 ذخیره", lambda *_: _save(),
+                                     height=52))
+        box.add_widget(btn_row)
+
+        popup = Popup(title="", content=box, size_hint=(0.94, 0.94),
+                      background="", background_color=(0, 0, 0, 0),
+                      separator_color=(0, 0, 0, 0))
+
+        def _save():
+            app = App.get_running_app()
+            name = name_in.text.strip() or ip_in.text.strip()
+            ip = ip_in.text.strip()
+            port = port_in.text.strip() or "554"
+            user = user_in.text.strip() or "admin"
+            pwd = pass_in.text
+            brand = brand_sp.text if brand_sp.text != "خودکار" else ""
+            try:
+                maxch = int(maxch_in.text.strip() or "16")
+            except ValueError:
+                maxch = 16
+            if not ip:
+                msg.text = fa("آدرس IP را وارد کنید.")
+                return
+            if is_new:
+                nvr = app.nvrs.add(name, ip=ip, port=port, user=user,
+                                   pwd=pwd, brand=brand,
+                                   max_channels=maxch)
+            else:
+                # ویرایش ساده: حذف و اضافه‌ی مجدد
+                nvr["name"] = name
+                nvr["ip"] = ip
+                nvr["port"] = port
+                nvr["user"] = user
+                nvr["pass"] = pwd
+                nvr["brand"] = brand
+                nvr["max_channels"] = maxch
+                app.nvrs.save()
+            # اضافه کردن کانال‌های انتخاب‌شده به‌عنوان دوربین
+            for ch, (chk, path) in found_state["checks"].items():
+                if chk.active:
+                    cname = "%s کانال %d" % (name, ch)
+                    # جلوگیری از تکراری
+                    exists = any(
+                        c.get("nvr_id") == nvr["id"] and c.get("channel") == ch
+                        for c in app.cameras.cameras)
+                    if not exists:
+                        app.cameras.add(cname, ip=ip, port=port, user=user,
+                                        pwd=pwd, path=path,
+                                        nvr_id=nvr["id"], channel=ch)
+            popup.dismiss()
+            self.rebuild_grid()
+
+        popup.open()
+
 
     def open_scan_main(self, *_):
         # اسکن شبکه از صفحه اصلی
@@ -998,23 +1205,40 @@ class SettingsScreen(Screen):
                                              color=C_ERR))
 
     def _build_inner(self, app):
+        # --- NVRها ---
+        if app.nvrs.nvrs:
+            card = self.section("NVRها")
+            for nvr in app.nvrs.nvrs:
+                chs = app.cameras.cameras_for_nvr(nvr["id"])
+                row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                                height=dp(52), spacing=dp(8))
+                row.add_widget(mk_button("حذف", lambda _b, n=nvr: self.ask_del_nvr(n),
+                                         bg=C_ERR, size_hint_x=0.28, height=44,
+                                         font_size="14sp"))
+                row.add_widget(mk_button("ویرایش",
+                                         lambda _b, n=nvr: self.edit_nvr(n),
+                                         bg=C_CARD, size_hint_x=0.32, height=44,
+                                         font_size="14sp"))
+                row.add_widget(mk_label("%s (%d کانال)" % (
+                    nvr.get("name") or nvr.get("ip") or "؟", len(chs)),
+                    size="14sp", halign="right", size_hint_x=0.40))
+                card.add_widget(row)
+
         # --- دوربین‌ها ---
         card = self.section("دوربین‌ها")
-        for cam in app.cameras.cameras:
-            tag = "[NVR] " if cam.get("nvr_channel") else ""
-            name = "%s%s" % (tag, cam.get("name") or "؟")
-            row = BoxLayout(orientation="horizontal", size_hint_y=None,
-                            height=dp(52), spacing=dp(8))
-            row.add_widget(mk_button("حذف", lambda _b, c=cam: self.ask_del(c),
-                                     bg=C_ERR, size_hint_x=0.28, height=44,
-                                     font_size="14sp"))
-            row.add_widget(mk_button("ویرایش",
-                                     lambda _b, c=cam: self.edit_cam(c),
-                                     bg=C_CARD, size_hint_x=0.32, height=44,
-                                     font_size="14sp"))
-            row.add_widget(mk_label(name, size="14sp", halign="right",
-                                    size_hint_x=0.40))
-            card.add_widget(row)
+        # گروه‌بندی: اول دوربین‌های تکی، بعد کانال‌های هر NVR
+        single = [c for c in app.cameras.cameras if not c.get("nvr_id")]
+        for cam in single:
+            self._cam_row(card, cam)
+        for nvr in app.nvrs.nvrs:
+            chs = app.cameras.cameras_for_nvr(nvr["id"])
+            if chs:
+                card.add_widget(mk_label("— %s —" % (
+                    nvr.get("name") or nvr.get("ip") or "؟"),
+                    size="13sp", bold=True, color=C_MUTED,
+                    halign="right", height=28))
+                for cam in chs:
+                    self._cam_row(card, cam)
 
         # --- تغییر رمز ---
         card = self.section("تغییر رمز عبور")
@@ -1068,6 +1292,53 @@ class SettingsScreen(Screen):
         popup.dismiss()
         self.build()
         App.get_running_app().sm.get_screen("main").rebuild_grid()
+    def _cam_row(self, card, cam):
+        """یک ردیف دوربین در لیست تنظیمات."""
+        row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                        height=dp(52), spacing=dp(8))
+        row.add_widget(mk_button("حذف", lambda _b, c=cam: self.ask_del(c),
+                                 bg=C_ERR, size_hint_x=0.28, height=44,
+                                 font_size="14sp"))
+        row.add_widget(mk_button("ویرایش",
+                                 lambda _b, c=cam: self.edit_cam(c),
+                                 bg=C_CARD, size_hint_x=0.32, height=44,
+                                 font_size="14sp"))
+        row.add_widget(mk_label(cam.get("name") or "؟", size="14sp",
+                                halign="right", size_hint_x=0.40))
+        card.add_widget(row)
+
+    def ask_del_nvr(self, nvr):
+        box = BoxLayout(orientation="vertical", spacing=dp(12),
+                        padding=dp(18))
+        rounded_bg(box, C_BG, RADIUS)
+        box.add_widget(mk_label("«%s» و همه‌ی کانال‌هایش حذف شود؟" % (
+            nvr.get("name") or "؟"), size="16sp", height=40))
+        row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                        height=dp(52), spacing=dp(10))
+        row.add_widget(mk_button("انصراف", lambda *_: p.dismiss(),
+                                 bg=C_CARD, height=52))
+        row.add_widget(mk_button("حذف", lambda *_: self.do_del_nvr(nvr, p),
+                                 bg=C_ERR, height=52))
+        box.add_widget(row)
+        p = Popup(title="", content=box, size_hint=(0.85, 0.35),
+                  background="", background_color=(0, 0, 0, 0),
+                  separator_color=(0, 0, 0, 0))
+        p.open()
+
+    def do_del_nvr(self, nvr, popup):
+        app = App.get_running_app()
+        app.cameras.delete_for_nvr(nvr["id"])
+        app.nvrs.delete(nvr["id"])
+        popup.dismiss()
+        self.build()
+        app.sm.get_screen("main").rebuild_grid()
+
+    def edit_nvr(self, nvr):
+        app = App.get_running_app()
+        ms = app.sm.get_screen("main")
+        app.sm.current = "main"
+        Clock.schedule_once(lambda dt: ms.nvr_form(nvr), 0.1)
+
 
     def save_pw(self, *_):
         app = App.get_running_app()
@@ -1092,6 +1363,7 @@ class IASViewerApp(App):
         self.users = UserStore(os.path.join(self.user_data_dir, "users.json"))
         self.users.ensure_defaults()
         self.cameras = CameraStore(os.path.join(self.user_data_dir, "cameras.json"))
+        self.nvrs = NVRStore(os.path.join(self.user_data_dir, "nvrs.json"))
         self.current_user = None
         self.sm = ScreenManager()
         self.sm.add_widget(LoginScreen(name="login"))
